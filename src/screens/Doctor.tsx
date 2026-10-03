@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { resourceCache } from '../cache/resources'
 import { Alert, Linking, Pressable, Text, View } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import { api } from '../api/client'
@@ -8,9 +9,10 @@ import { Badge, Button, Empty, ErrorNotice, Field, Loading, Page, Pagination, Pi
 import { useResource } from '../hooks/useResource'
 import { dateText, readable, referralValidation, timestamp } from '../utils/domain'
 
-export function DoctorReferrals({ onCreate }: { onCreate: () => void }) {
-  const { token } = useAuth(), resource = useResource(useCallback(() => api.referrals(token!), [token]))
+export function DoctorReferrals({ onCreate, active = true }: { onCreate: () => void; active?: boolean }) {
+  const { token } = useAuth(), resource = useResource(useCallback(() => api.referrals(token!), [token]), 'doctor-referrals', active)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [picker, setPicker] = useState(false), [page, setPage] = useState(1), [selected, setSelected] = useState<Referral | null>(null)
+  useEffect(() => { if (!active) setSelected(null) }, [active])
   const filtered = useMemo(() => (resource.data?.items || []).filter(r => (status === 'all' || status === r.status) && [r.patient_name, r.patient_phone_number, r.patient_email, r.booking?.reference, ...r.tests.map(t => t.name), ...r.packages.map(p => p.name)].join(' ').toLowerCase().includes(query.toLowerCase())), [resource.data, status, query])
   const count = Math.max(1, Math.ceil(filtered.length / 6)), current = Math.min(page, count)
   return <><Page refreshing={resource.loading} onRefresh={resource.refresh}>
@@ -27,7 +29,7 @@ export function DoctorReferrals({ onCreate }: { onCreate: () => void }) {
       <Text style={s.muted}>{r.booking ? `Payment: ${readable(r.booking.payment_status)}` : 'Tap to review referral and delivery status'} </Text>
     </Pressable>)}
     <Pagination page={current} count={count} onChange={setPage} />
-  </Page><Sheet visible={!!selected} title="Referral details" onClose={() => setSelected(null)}>{selected ? <>
+  </Page><Sheet visible={active && !!selected} title="Referral details" onClose={() => setSelected(null)}>{selected ? <>
     <Text style={s.title}>{selected.patient_name}</Text><Badge label={readable(selected.status)} />
     <Text style={s.text}>Mobile: {selected.patient_phone_number}</Text><Text style={s.text}>Email: {selected.patient_email || 'Not provided'}</Text>
     <Text style={s.text}>Age: {selected.patient_age ?? 'Not provided'}</Text><Text style={s.muted}>Created {timestamp(selected.created_at)}</Text>
@@ -43,7 +45,7 @@ export function DoctorReferrals({ onCreate }: { onCreate: () => void }) {
 }
 
 export function NewReferral({ onDone }: { onDone: () => void }) {
-  const { token } = useAuth(), catalog = useResource(useCallback(() => api.catalog(token!), [token]))
+  const { token } = useAuth(), catalog = useResource(useCallback(() => api.catalog(token!), [token]), 'doctor-catalog')
   const [step, setStep] = useState(1), [name, setName] = useState(''), [age, setAge] = useState(''), [phone, setPhone] = useState(''), [email, setEmail] = useState(''), [note, setNote] = useState('')
   const [tests, setTests] = useState<number[]>([]), [packages, setPackages] = useState<number[]>([]), [path, setPath] = useState<string | null>(null), [fileName, setFileName] = useState('')
   const [consent, setConsent] = useState(false), [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [error, setError] = useState(''), [uncertain, setUncertain] = useState(false)
@@ -65,12 +67,13 @@ export function NewReferral({ onDone }: { onDone: () => void }) {
     const invalid = referralValidation(data)
     if (invalid) { setError(invalid); return }
     sending.current = true; setBusy(true); setError('')
-    try { await api.createReferral(token!, data); Alert.alert('Referral created', 'Delivery and booking status are available in Patient referrals.'); onDone() }
+    try { await api.createReferral(token!, data); resourceCache.invalidate('doctor-referrals'); Alert.alert('Referral created', 'Delivery and booking status are available in Patient referrals.'); onDone() }
     catch (e) {
       const status = (e as { status?: number }).status
       const ambiguous = status === 0 || (status !== undefined && status >= 500)
       setError((e as Error).message + (ambiguous ? ' Check Patient referrals before trying again; the referral may already exist.' : ''))
       if (ambiguous) setUncertain(true)
+      if (ambiguous) resourceCache.invalidate('doctor-referrals')
     }
     finally { sending.current = false; setBusy(false) }
   }

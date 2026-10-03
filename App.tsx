@@ -10,6 +10,7 @@ import { Login } from './src/screens/Login'
 import { DoctorReferrals, NewReferral } from './src/screens/Doctor'
 import { AgentReferrals, Collections } from './src/screens/Collections'
 import { canRead, readable } from './src/utils/domain'
+import { resourceCache } from './src/cache/resources'
 
 export default function App() { return <SafeAreaProvider><AuthProvider><SafeAreaView style={[s.flex, { backgroundColor: colors.bg }]}><StatusBar style="dark" /><Workspace /></SafeAreaView></AuthProvider></SafeAreaProvider> }
 function Workspace() {
@@ -27,17 +28,33 @@ function Workspace() {
   return <>
     <Header title={create ? 'New referral' : current === 'patients' ? 'Patient referrals' : tabs.find(t => t.key === current)!.label} onBack={create ? leaveCreate : undefined} />
     {auth.error ? <View style={{ padding: 12 }}><ErrorNotice error={auth.error} /><Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
-    <View style={s.flex} key={`${auth.user.id}-${current}-${create}`}>
-      {doctor && create ? <NewReferral onDone={() => { setCreate(false); setTab('patients') }} /> : doctor && current === 'patients' ? <DoctorReferrals onCreate={() => setCreate(true)} /> : current === 'orders' ? <Collections /> : current === 'overview' ? <Collections overview /> : current === 'referrals' ? <AgentReferrals /> : <Page>
-        <View style={s.card}><Text style={s.title}>{auth.user.full_name}</Text><BadgeRole role={auth.user.role} /><Text style={s.text}>{auth.user.email}</Text><Text style={s.muted}>{auth.user.hospital_clinic_name || auth.user.phone_number || ''}</Text></View>
-        {!doctor ? <View style={s.card}><Text style={s.title}>Workspace access</Text>{auth.permissions.filter(p => ['overview', 'orders', 'referrals'].includes(p.screen)).map(p => <Text key={p.screen} style={s.text}>{readable(p.screen)}: {readable(p.access_level)}</Text>)}{tabs.length === 1 ? <Text style={s.text}>No operational access assigned. Ask a super admin to grant screen access.</Text> : null}<Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
-        <Button label="Change password" icon="lock" secondary onPress={() => setChangingPassword(true)} />
-        <Text style={s.muted}>Patient details are not stored for offline use. Use Forgot password on the sign-in screen if you cannot access your account.</Text>
-        <Button label="Sign out" secondary onPress={() => Alert.alert('Sign out?', 'Your session and displayed patient information will be cleared.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign out', onPress: () => void auth.logout() }])} />
-      </Page>}
-    </View>
+    <RetainedWorkspace key={`${auth.user.id}-${resourceCache.epoch}`} tabs={tabs} current={current} create={doctor && create} onCreate={() => setCreate(true)} onDone={() => { setCreate(false); setTab('patients') }} onPassword={() => setChangingPassword(true)} />
     {changingPassword ? <Sheet visible title="Account security" onClose={() => setChangingPassword(false)}><PasswordForm mode="change" onDone={() => setChangingPassword(false)} onCancel={() => setChangingPassword(false)} /></Sheet> : null}
     {!create ? <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderColor: colors.border }}>{tabs.map(t => <Pressable key={t.key} accessibilityRole="tab" accessibilityState={{ selected: current === t.key }} onPress={() => setTab(t.key)} style={{ flex: 1, minHeight: 60, justifyContent: 'center', alignItems: 'center', padding: 4, gap: 4 }}><Feather name={t.key === 'account' ? 'user' : t.key === 'orders' ? 'map-pin' : t.key === 'overview' ? 'bar-chart-2' : 'file-text'} size={21} color={current === t.key ? colors.green : colors.muted} /><Text style={{ color: current === t.key ? colors.green : colors.muted, fontWeight: current === t.key ? '800' : '500', fontSize: 12 }}>{t.label}</Text></Pressable>)}</View> : null}
   </>
 }
 function BadgeRole({ role }: { role: string }) { return <Text style={[s.text, { color: colors.green }]}>{readable(role)}</Text> }
+
+function RetainedWorkspace({ tabs, current, create, onCreate, onDone, onPassword }: { tabs: { key: string; label: string }[]; current: string; create: boolean; onCreate: () => void; onDone: () => void; onPassword: () => void }) {
+  const [visited, setVisited] = useState([current])
+  useEffect(() => { setVisited(previous => previous.includes(current) ? previous : [...previous, current]) }, [current])
+  return <View style={s.flex}>
+    {tabs.filter(t => visited.includes(t.key) || current === t.key).map(t => {
+      const active = !create && current === t.key
+      return <View key={t.key} style={active ? s.flex : { display: 'none' }} accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}>
+        {t.key === 'patients' ? <DoctorReferrals active={active} onCreate={onCreate} /> : t.key === 'orders' ? <Collections active={active} /> : t.key === 'overview' ? <Collections active={active} overview /> : t.key === 'referrals' ? <AgentReferrals active={active} /> : <Account onPassword={onPassword} noAccess={tabs.length === 1} />}
+      </View>
+    })}
+    {create ? <NewReferral onDone={onDone} /> : null}
+  </View>
+}
+function Account({ onPassword, noAccess }: { onPassword: () => void; noAccess: boolean }) {
+  const auth = useAuth(), user = auth.user!
+  return <Page>
+    <View style={s.card}><Text style={s.title}>{user.full_name}</Text><BadgeRole role={user.role} /><Text style={s.text}>{user.email}</Text><Text style={s.muted}>{user.hospital_clinic_name || user.phone_number || ''}</Text></View>
+    {user.role !== 'doctor' ? <View style={s.card}><Text style={s.title}>Workspace access</Text>{auth.permissions.filter(p => ['overview', 'orders', 'referrals'].includes(p.screen)).map(p => <Text key={p.screen} style={s.text}>{readable(p.screen)}: {readable(p.access_level)}</Text>)}{noAccess ? <Text style={s.text}>No operational access assigned. Ask a super admin to grant screen access.</Text> : null}<Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
+    <Button label="Change password" icon="lock" secondary onPress={onPassword} />
+    <Text style={s.muted}>Patient details are not stored for offline use. Use Forgot password on the sign-in screen if you cannot access your account.</Text>
+    <Button label="Sign out" secondary onPress={() => Alert.alert('Sign out?', 'Your session and displayed patient information will be cleared.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign out', onPress: () => void auth.logout() }])} />
+  </Page>
+}

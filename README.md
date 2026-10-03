@@ -55,6 +55,8 @@ Patient records and referral drafts are memory-only, not persisted for offline u
 
 ## Verification and release
 
+Navigation lazily mounts permitted tabs, then retains their screen/search/filter/scroll state during the current session. Reads use a shared, bounded, memory-only cache with 30-second freshness and in-flight request deduplication. Switching tabs or returning from background revalidates stale data without replacing populated screens with a full-page loader. Pull-to-refresh always requests fresh data. Referral creation and collection updates invalidate relevant reads; collection status is still verified directly against the API before updates. Logout, account changes and access changes discard cached data; late requests cannot repopulate a cleared cache. No persistent patient-data cache or backend pagination change is introduced.
+
 ```powershell
 npm run typecheck
 npm test
