@@ -1,0 +1,58 @@
+import type { Assignment, AssignmentStatus, Catalog, Permission, Referral, ReferralCreate, ReferralDashboard, Session, Tracking, User } from './types'
+
+export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://api.calllabs.in/api/v1').replace(/\/+$/, '')
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); this.name = 'ApiError' }
+}
+let onExpired: ((token: string) => void) | undefined
+export const setSessionExpiredHandler = (handler?: (token: string) => void) => { onExpired = handler }
+
+export async function request<T>(path: string, token?: string, options: RequestInit = {}): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20000)
+  try {
+    const multipart = options.body instanceof FormData
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options, signal: controller.signal,
+      headers: { ...(multipart ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      if (response.status === 401 && token) onExpired?.(token)
+      const detail = Array.isArray(body?.detail) ? body.detail[0]?.msg : body?.detail
+      throw new ApiError(typeof detail === 'string' ? detail : 'Unable to complete this request. Please try again.', response.status)
+    }
+    return body as T
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(options.method && options.method !== 'GET'
+      ? 'Connection interrupted. Check the latest records before retrying; the request may already have completed.'
+      : 'Unable to connect. Check your internet connection and try again.', 0)
+  } finally { clearTimeout(timer) }
+}
+const json = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) })
+export const api = {
+  login: (email: string, password: string) => request<Session>('/admin/auth/login', undefined, json('POST', { email, password })),
+  profile: (token: string) => request<User>('/admin/me', token),
+  permissions: (token: string) => request<Permission[]>('/admin/access-control/my', token),
+  catalog: (token: string) => request<Catalog>('/doctor-referrals/catalog', token),
+  referrals: (token: string) => request<{ items: Referral[]; total: number }>('/doctor-referrals', token),
+  createReferral: (token: string, data: ReferralCreate) => request<Referral>('/doctor-referrals', token, json('POST', data)),
+  uploadPrescription: (token: string, file: { uri: string; name: string; mimeType: string }) => {
+    const body = new FormData()
+    // React Native multipart files use URI descriptors, not browser File objects.
+    body.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob)
+    return request<{ path: string }>('/doctor-referrals/prescription-upload', token, { method: 'POST', body })
+  },
+  assignments: async (token: string) => {
+    const all: Assignment[] = []
+    for (let offset = 0; ; offset += 100) {
+      const page = await request<Assignment[]>(`/admin/collection-agent/assignments?limit=100&offset=${offset}`, token)
+      all.push(...page)
+      if (page.length < 100) return all
+    }
+  },
+  updateAssignment: (token: string, id: number, assignment_status: AssignmentStatus, notes: string) => request<Assignment>(`/admin/collection-agent/assignments/${id}`, token, json('PATCH', { assignment_status, notes: notes.trim() || null })),
+  timeline: (token: string, orderId: number) => request<{ items: Tracking[] }>('/admin/orders/' + orderId + '/tracking-events', token),
+  operationalReferrals: (token: string) => request<ReferralDashboard>('/operational/referrals/dashboard', token),
+}

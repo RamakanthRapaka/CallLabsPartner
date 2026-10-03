@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+dist/
+android/
+ios/
+.env
+.env.local
+*.log
+*.keystore
+*.jks
+credentials.json
+releases/
+*.apk
