@@ -68,6 +68,6 @@ Before release, test approved doctor/agent accounts on a real device: login/logo
 
 ## Partner push notifications
 
-See [PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) for Firebase/Expo configuration, authenticated device registration, logout cleanup, permission handling, notification-tap authorization, and Android rebuild/testing prerequisites. Private service-account keys and worker credentials must never enter this repository. Native notification code requires a rebuilt APK; it is not activated by reloading the previous APK.
+See [PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) for the complete Firebase/Expo/Vercel setup runbook, authenticated device registration, logout cleanup, notification-tap authorization, cron-job.org scheduler configuration and manual testing, standalone APK build commands, troubleshooting, and recorded completion checklist. Private service-account keys and worker credentials must never enter this repository. Native notification code requires a rebuilt APK; it is not activated by reloading the previous APK.
 
 Initial dependency audit reports transitive Expo/React Native advisories, including high-severity findings. Review and resolve these before production distribution. Do not run `npm audit fix --force`: its proposed Expo/React Native major downgrades are incompatible with this SDK. No production release has been prepared.
