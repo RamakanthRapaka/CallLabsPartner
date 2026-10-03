@@ -70,3 +70,17 @@ test('partner password APIs never use customer recovery routes', async () => {
   assert.equal(sent[2].options.headers.Authorization, 'Bearer test-token')
   assert.equal(JSON.parse(sent[2].options.body).current_password, 'OldPassword123')
 })
+
+test('push device API uses Bearer auth and DELETE JSON body; never calls worker', async () => {
+  const sent = []
+  const { api } = load('src/api/client.ts', { FormData, AbortController, setTimeout, clearTimeout, fetch: async (url, options) => { sent.push({ url, options }); return { ok: true, json: async () => ({ message: 'Done' }) } } })
+  await api.registerPush('session', 'ExponentPushToken[test]')
+  await api.deregisterPush('session', 'ExponentPushToken[test]')
+  assert.equal(sent.length, 2)
+  assert.equal(sent[0].options.method, 'POST'); assert.equal(sent[1].options.method, 'DELETE')
+  for (const row of sent) {
+    assert.equal(row.url, 'https://api.calllabs.in/api/v1/partner/push/devices')
+    assert.equal(row.options.headers.Authorization, 'Bearer session')
+    assert.deepEqual(JSON.parse(row.options.body), { expo_push_token: 'ExponentPushToken[test]' })
+  }
+})

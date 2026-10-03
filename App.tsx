@@ -11,6 +11,7 @@ import { DoctorReferrals, NewReferral } from './src/screens/Doctor'
 import { AgentReferrals, Collections } from './src/screens/Collections'
 import { canRead, readable } from './src/utils/domain'
 import { resourceCache } from './src/cache/resources'
+import { PartnerNotifications } from './src/push/Notifications'
 
 export default function App() { return <SafeAreaProvider><AuthProvider><SafeAreaView style={[s.flex, { backgroundColor: colors.bg }]}><StatusBar style="dark" /><Workspace /></SafeAreaView></AuthProvider></SafeAreaProvider> }
 function Workspace() {
@@ -26,6 +27,7 @@ function Workspace() {
   if (!auth.user || !auth.token) return <><Login />{auth.error ? <View style={{ padding: 16 }}><Button label="Retry saved session" secondary onPress={() => void auth.refresh()} /></View> : null}</>
   if (auth.user.approval_status !== 'approved') return <><Header title="Account approval" /><Page><Text style={s.title}>Your account is {readable(auth.user.approval_status).toLowerCase()}</Text><Text style={s.text}>Contact your Call Labs administrator before using operational screens.</Text><Button label="Check approval" onPress={() => void auth.refresh()} /><Button label="Sign out" secondary onPress={() => void auth.logout()} /></Page></>
   return <>
+    <PartnerNotifications showStatus={current === 'account' && !create} />
     <Header title={create ? 'New referral' : current === 'patients' ? 'Patient referrals' : tabs.find(t => t.key === current)!.label} onBack={create ? leaveCreate : undefined} />
     {auth.error ? <View style={{ padding: 12 }}><ErrorNotice error={auth.error} /><Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
     <RetainedWorkspace key={`${auth.user.id}-${resourceCache.epoch}`} tabs={tabs} current={current} create={doctor && create} onCreate={() => setCreate(true)} onDone={() => { setCreate(false); setTab('patients') }} onPassword={() => setChangingPassword(true)} />

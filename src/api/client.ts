@@ -32,6 +32,8 @@ export async function request<T>(path: string, token?: string, options: RequestI
 }
 const json = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) })
 export const api = {
+  registerPush: (token: string, expo_push_token: string) => request<{ message: string }>('/partner/push/devices', token, json('POST', { expo_push_token })),
+  deregisterPush: (token: string, expo_push_token: string) => request<{ message: string }>('/partner/push/devices', token, json('DELETE', { expo_push_token })),
   login: (email: string, password: string) => request<Session>('/admin/auth/login', undefined, json('POST', { email, password })),
   forgotPassword: (email: string) => request<{ message: string }>('/admin/auth/forgot-password', undefined, json('POST', { email: email.trim() })),
   resetPassword: (code: string, new_password: string) => request<{ message: string }>('/admin/auth/reset-password', undefined, json('POST', { code, new_password })),

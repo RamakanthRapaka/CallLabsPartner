@@ -64,6 +64,10 @@ npx expo install --check
 npx expo export --platform android
 ```
 
-Before release, test approved doctor/agent accounts on a real device: login/logout/expiry, no/read/write permissions, prescription upload, SMS/email consent and delivery, prescription-only lab review, order ownership, collection updates and referral booking conversion. Production signing, a square launcher icon, Play Store privacy/data-safety declarations and distribution are separate release tasks. Live notifications are only triggered when a user explicitly submits a referral.
+Before release, test approved doctor/agent accounts on a real device: login/logout/expiry, no/read/write permissions, prescription upload, SMS/email consent and delivery, prescription-only lab review, order ownership, collection updates and referral booking conversion. Production signing, a square launcher icon, Play Store privacy/data-safety declarations and distribution are separate release tasks. SMS/email referral sends require explicit submission; automatic partner push events require the deployed backend outbox and secured worker scheduler.
+
+## Partner push notifications
+
+See [PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) for Firebase/Expo configuration, authenticated device registration, logout cleanup, permission handling, notification-tap authorization, and Android rebuild/testing prerequisites. Private service-account keys and worker credentials must never enter this repository. Native notification code requires a rebuilt APK; it is not activated by reloading the previous APK.
 
 Initial dependency audit reports transitive Expo/React Native advisories, including high-severity findings. Review and resolve these before production distribution. Do not run `npm audit fix --force`: its proposed Expo/React Native major downgrades are incompatible with this SDK. No production release has been prepared.

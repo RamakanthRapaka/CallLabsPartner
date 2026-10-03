@@ -5,6 +5,7 @@ import { api, setSessionExpiredHandler } from '../api/client'
 import type { Permission, User } from '../api/types'
 import { isPartner } from '../utils/domain'
 import { resourceCache } from '../cache/resources'
+import { pushSession } from '../push/session'
 
 type Auth = { token: string | null; user: User | null; permissions: Permission[]; loading: boolean; error: string; login: (email: string, password: string) => Promise<void>; logout: () => Promise<void>; refresh: () => Promise<void> }
 const Context = createContext<Auth | null>(null)
@@ -15,9 +16,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const current = useRef<string | null>(null)
   const accessSignature = useRef('')
   async function logout() {
+    const previous = current.current
     current.current = null; setToken(null); setUser(null); setPermissions([]); setError('')
     resourceCache.setScope(null); resourceCache.clear(); accessSignature.current = ''
     await SecureStore.deleteItemAsync(KEY).catch(() => setError('Unable to clear the saved session. Please retry signing out.'))
+    if (previous) await pushSession.detach(previous).catch(() => setError('Signed out locally. Notification cleanup could not be confirmed; sign in again when connected to manage this device.'))
   }
   async function load(value: string) {
     const profile = await api.profile(value)

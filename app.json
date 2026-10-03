@@ -1,16 +1,31 @@
 {
   "expo": {
     "name": "Call Labs Partner",
-    "slug": "call-labs-partner",
+    "slug": "calllabs-partner",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "android": {
+      "googleServicesFile": "./google-services.json",
       "package": "in.calllabs.partner",
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
-      "blockedPermissions": ["android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.SYSTEM_ALERT_WINDOW"]
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
-    "plugins": ["expo-secure-store", "expo-document-picker"]
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker",
+      ["expo-notifications", { "color": "#008744", "defaultChannel": "partner-updates" }]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "798fa7e0-df47-4154-9208-9c35558529ec"
+      }
+    },
+    "owner": "calllabs-partner-india"
   }
 }

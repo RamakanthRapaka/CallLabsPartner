@@ -11,3 +11,5 @@ ios/
 credentials.json
 releases/
 *.apk
+*firebase-adminsdk*.json
+*service-account*.json
