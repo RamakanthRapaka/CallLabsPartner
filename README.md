@@ -44,6 +44,7 @@ Do not place provider keys, Supabase service keys or other secrets in mobile env
 ## Implemented workflows
 
 - Existing email/password partner login, approval checks, encrypted token storage and logout. Backend token expiry applies; there is no separate refresh-token endpoint integrated.
+- Forgot password via an emailed 15-minute single-use reset code; Change password under Account with current-password confirmation. Updating a password signs out prior sessions. Requires backend migration `20261003_41` and deployment of the partner password routes; old testing APKs need rebuilding.
 - Doctors: searchable/status-filtered paginated patient referrals; referral details, booking/payment status and notification events; three-step patient/recommendation/review creation; one optional email; searchable category-filtered tests/packages; selected items first; prescription image upload; prescription-only lab review; explicit contact consent.
 - Collection agents: permitted screens only; paginated assigned bookings and status/search filters; collection/address/payment information; call/directions; sequential collection updates with notes and confirmation; tracking timeline; route counts; existing referral-qualification dashboard.
 - Account/access refresh, network errors, loading/empty states, readable date formatting (`dd-mm-yyyy`), safe-area layout and native Android back handling.

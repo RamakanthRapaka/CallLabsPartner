@@ -33,6 +33,9 @@ export async function request<T>(path: string, token?: string, options: RequestI
 const json = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) })
 export const api = {
   login: (email: string, password: string) => request<Session>('/admin/auth/login', undefined, json('POST', { email, password })),
+  forgotPassword: (email: string) => request<{ message: string }>('/admin/auth/forgot-password', undefined, json('POST', { email: email.trim() })),
+  resetPassword: (code: string, new_password: string) => request<{ message: string }>('/admin/auth/reset-password', undefined, json('POST', { code, new_password })),
+  changePassword: (token: string, current_password: string, new_password: string) => request<{ message: string }>('/admin/auth/change-password', token, json('POST', { current_password, new_password })),
   profile: (token: string) => request<User>('/admin/me', token),
   permissions: (token: string) => request<Permission[]>('/admin/access-control/my', token),
   catalog: (token: string) => request<Catalog>('/doctor-referrals/catalog', token),

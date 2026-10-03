@@ -9,6 +9,12 @@ function load(file, globals = {}) {
   const exports = {}; vm.runInNewContext(source, { exports, process: { env: {} }, ...globals }); return exports
 }
 const d = load('src/utils/domain.ts')
+test('password confirmation, length and reuse validation', () => {
+  assert.match(d.passwordError('short', 'short'), /8 and 128/)
+  assert.match(d.passwordError('NewPassword123', 'Different123'), /match/)
+  assert.match(d.passwordError('OldPassword123', 'OldPassword123', 'OldPassword123'), /different/)
+  assert.equal(d.passwordError('NewPassword123', 'NewPassword123', 'OldPassword123'), null)
+})
 test('only active partner roles can sign in', () => {
   assert.equal(d.isPartner({ role: 'customer', is_active: true }), false)
   assert.equal(d.isPartner({ role: 'doctor', is_active: false }), false)
@@ -50,4 +56,17 @@ test('API does not retry mutations and leaves multipart boundaries to fetch', as
   await assert.rejects(api.request('/upload', 'test-token', { method: 'POST', body: new FormData() }), /already have completed/)
   assert.equal(calls, 1)
   assert.equal(headers['Content-Type'], undefined)
+})
+test('partner password APIs never use customer recovery routes', async () => {
+  const sent = []
+  const api = load('src/api/client.ts', { FormData, AbortController, setTimeout, clearTimeout, fetch: async (url, options) => { sent.push({ url, options }); return { ok: true, json: async () => ({ message: 'Done' }) } } })
+  await api.api.forgotPassword(' doctor@example.com ')
+  await api.api.resetPassword('test-reset-code', 'NewPassword123')
+  await api.api.changePassword('test-token', 'OldPassword123', 'NewPassword123')
+  assert.equal(sent[0].url, 'https://api.calllabs.in/api/v1/admin/auth/forgot-password')
+  assert.equal(JSON.parse(sent[0].options.body).email, 'doctor@example.com')
+  assert.equal(sent[0].options.headers.Authorization, undefined)
+  assert.equal(sent[1].url, 'https://api.calllabs.in/api/v1/admin/auth/reset-password')
+  assert.equal(sent[2].options.headers.Authorization, 'Bearer test-token')
+  assert.equal(JSON.parse(sent[2].options.body).current_password, 'OldPassword123')
 })

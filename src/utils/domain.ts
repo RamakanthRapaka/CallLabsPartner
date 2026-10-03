@@ -32,3 +32,10 @@ export function referralValidation(data: ReferralCreate): string | null {
   if (!data.consent_to_contact) return 'Patient consent is required before sending the referral.'
   return null
 }
+
+export function passwordError(password: string, confirmation: string, current?: string): string | null {
+  if (password.length < 8 || password.length > 128) return 'Use a password between 8 and 128 characters.'
+  if (password !== confirmation) return 'The new passwords do not match.'
+  if (current !== undefined && current === password) return 'Choose a password different from your current password.'
+  return null
+}
