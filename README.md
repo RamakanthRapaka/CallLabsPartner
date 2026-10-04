@@ -64,7 +64,7 @@ npx expo install --check
 npx expo export --platform android
 ```
 
-Before release, test approved doctor/agent accounts on a real device: login/logout/expiry, no/read/write permissions, prescription upload, SMS/email consent and delivery, prescription-only lab review, order ownership, collection updates and referral booking conversion. Production signing, a square launcher icon, Play Store privacy/data-safety declarations and distribution are separate release tasks. SMS/email referral sends require explicit submission; automatic partner push events require the deployed backend outbox and secured worker scheduler.
+Before release, test approved doctor/agent accounts on a real device: login/logout/expiry, no/read/write permissions, prescription upload, SMS/email consent and delivery, prescription-only lab review, order ownership, collection updates and referral booking conversion. Launcher/adaptive icons and the separate notification symbol are configured; see [BRANDING.md](BRANDING.md) for asset paths and testing APK builds. Production signing, Play Store privacy/data-safety declarations and distribution are separate release tasks. SMS/email referral sends require explicit submission; automatic partner push events require the deployed backend outbox and secured worker scheduler.
 
 ## Collection test details
 

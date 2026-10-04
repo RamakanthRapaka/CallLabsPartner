@@ -5,9 +5,14 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/app-icon.png",
     "android": {
       "googleServicesFile": "./google-services.json",
       "package": "in.calllabs.partner",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
       "blockedPermissions": [
@@ -19,7 +24,7 @@
     "plugins": [
       "expo-secure-store",
       "expo-document-picker",
-      ["expo-notifications", { "color": "#008744", "defaultChannel": "partner-updates" }]
+      ["expo-notifications", { "icon": "./assets/notification-icon.png", "color": "#008744", "defaultChannel": "partner-updates" }]
     ],
     "extra": {
       "eas": {
