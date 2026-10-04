@@ -6,13 +6,15 @@ import { useAuth } from '../auth/AuthContext'
 import { Button, Loading, s, Sheet } from '../components/ui'
 import { resourceCache } from '../cache/resources'
 import { canRead, readable, dateText } from '../utils/domain'
-import { parsePushTarget, type PushTarget } from './lifecycle'
+import { parsePushTarget, type PushTarget, type AssignmentTarget } from './lifecycle'
 import { pushSession } from './session'
 
-export function PartnerNotifications({ showStatus }: { showStatus: boolean }) {
+export function PartnerNotifications({ showStatus, onAssignment }: { showStatus: boolean; onAssignment: (target: AssignmentTarget) => void }) {
   const auth = useAuth(), [status, setStatus] = useState('Preparing notifications…'), [retry, setRetry] = useState(0)
   const [detail, setDetail] = useState<{ loading: boolean; text: string } | null>(null)
   const seen = useRef(''), opening = useRef(0)
+  const navigate = useRef(onAssignment)
+  navigate.current = onAssignment
   const accessSignature = auth.permissions.map(p => `${p.screen}:${p.access_level}`).sort().join('|')
   useEffect(() => {
     let alive = true, subscription: { remove(): void } | undefined, received: { remove(): void } | undefined, nativeToken: { remove(): void } | undefined
@@ -30,6 +32,11 @@ export function PartnerNotifications({ showStatus }: { showStatus: boolean }) {
       try {
         const profile = await api.profile(token)
         if (profile.id !== user.id || !profile.is_active || profile.approval_status !== 'approved' || profile.role !== user.role) throw new Error('Your account no longer has access to this notification.')
+        if (target.kind === 'assignment') {
+          if (!canRead(await api.permissions(token), 'orders') || !canRead(auth.permissions, 'orders')) throw new Error('Collection access is unavailable. Refresh your account access or contact your administrator.')
+          if (alive && serial === opening.current) { setDetail(null); navigate.current(target) }
+          return
+        }
         const text = await loadAuthorizedTarget(target, token, user.role)
         if (alive && serial === opening.current) setDetail({ loading: false, text })
       } catch (e) { if (alive && serial === opening.current) setDetail({ loading: false, text: (e as Error).message }) }
@@ -88,7 +95,7 @@ export function PartnerNotifications({ showStatus }: { showStatus: boolean }) {
       } catch { if (alive) setStatus('Notifications require a rebuilt Android APK. Other app features remain available.') }
     })()
     const foreground = AppState.addEventListener('change', state => { if (state === 'active') void register() })
-    return () => { alive = false; ++opening.current; subscription?.remove(); received?.remove(); nativeToken?.remove(); foreground.remove(); notifications?.setNotificationHandler(null); void notifications?.dismissAllNotificationsAsync().catch(() => {}) }
+    return () => { alive = false; ++opening.current; subscription?.remove(); received?.remove(); nativeToken?.remove(); foreground.remove(); notifications?.setNotificationHandler(null) }
   }, [auth.token, auth.user?.id, auth.user?.role, auth.user?.approval_status, accessSignature, retry])
   return <>
     {showStatus ? <View style={{ padding: 12 }}><Text style={s.text}>{status}</Text><Button label="Retry notifications" secondary onPress={() => setRetry(v => v + 1)} /><Button label="Phone notification settings" secondary onPress={() => void Linking.openSettings().catch(() => {})} /></View> : null}

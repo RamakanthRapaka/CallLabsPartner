@@ -279,7 +279,28 @@ The current release variant uses the generated debug signing key and is for priv
 - [ ] Confirm updated standalone APK built and installed.
 - [ ] Verify a real authorized test notification reaches the phone and tap authorization works.
 
-### Official references
+### Assignment actions (2026-10-04)
+
+Assignment alerts now open Collections and its existing assignment detail sheet, rather than a read-only order summary. Both `booking_assigned` and `booking_reassigned` require numeric positive `assignment_id` and `order_id` in their data payload. These are different identifiers; the app never substitutes an order ID for an assignment ID.
+
+```json
+{"event_type":"booking_assigned","assignment_id":7,"order_id":51}
+```
+
+The app rechecks approved, active partner identity and collection access, then loads the authenticated assignment queue and matches BOTH identifiers. Missing/reassigned records show an unavailable message. Foreground receipt refreshes cached lists without automatically changing screens; tapping the notification opens details. The existing response listener handles open/background taps; the last-response lookup handles a normal closed-app launch after session restoration. OS force-stop can prevent notification delivery until the app is reopened.
+
+Accept and Reject are offered only for `assigned` assignments with write/manage access and non-terminal orders. Acceptance precedes Start journey. Reject opens an optional reason field and requires a confirmation dialog. Requests use the existing bearer-token client:
+
+- `POST /admin/collection-agent/assignments/{assignment_id}/accept`
+- `POST /admin/collection-agent/assignments/{assignment_id}/reject`
+
+Paths are relative to `https://api.calllabs.in/api/v1`. Empty notes send `{}`; populated notes send `{"notes":"trimmed text"}`. The app does not assume an action response schema or add a new detail GET contract: it reloads the existing authenticated assignment list to obtain current detail/status. Successful rejection may remove the record from that list; the sheet shows rejection acknowledgement and disables further actions. Closing returns to the refreshed list.
+
+401 uses the existing session-expiry logout. 403 shows access feedback; 404 shows unavailability. 409 reloads the assignment and shows conflict feedback without retrying the write. Network failures keep the detail screen and entered notes, disable writes until Refresh assignment details succeeds, and never automatically repeat a POST with an uncertain outcome.
+
+Validation: `npm run typecheck` and mocked `npm test` cover notification routing, cold-start/listener deduplication, confirmation, notes, non-pending actions, authenticated API paths and conflict handling. No backend code or production records were changed. Build/install an updated APK and verify notification taps on a real phone in foreground, background and normal closed-app states; mocked tests are not proof of device delivery.
+
+### Reference links
 
 - Firebase Android registration: https://firebase.google.com/docs/android/setup
 - Expo SDK 57 notifications: https://docs.expo.dev/versions/v57.0.0/sdk/notifications/

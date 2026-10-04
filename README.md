@@ -66,6 +66,10 @@ npx expo export --platform android
 
 Before release, test approved doctor/agent accounts on a real device: login/logout/expiry, no/read/write permissions, prescription upload, SMS/email consent and delivery, prescription-only lab review, order ownership, collection updates and referral booking conversion. Production signing, a square launcher icon, Play Store privacy/data-safety declarations and distribution are separate release tasks. SMS/email referral sends require explicit submission; automatic partner push events require the deployed backend outbox and secured worker scheduler.
 
+## Collection test details
+
+See [COLLECTION_DETAILS.md](COLLECTION_DETAILS.md) for collection-card test names, detailed instruction display and the pending additive backend data requirement. Sample type is intentionally not displayed. Names-only assignment responses remain supported; missing collection instructions are never inferred.
+
 ## Partner push notifications
 
 See [PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) for the complete Firebase/Expo/Vercel setup runbook, authenticated device registration, logout cleanup, notification-tap authorization, cron-job.org scheduler configuration and manual testing, standalone APK build commands, troubleshooting, and recorded completion checklist. Private service-account keys and worker credentials must never enter this repository. Native notification code requires a rebuilt APK; it is not activated by reloading the previous APK.

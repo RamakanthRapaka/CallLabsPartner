@@ -26,7 +26,9 @@ test('read-only access cannot update collection statuses', () => {
   assert.equal(d.canRead([], 'orders'), false)
 })
 test('collection sequence stops at handover and terminal orders', () => {
-  assert.equal(d.nextStep({ assignment_status: 'assigned', order: { status: 'pending' } }).status, 'en_route')
+  assert.equal(d.nextStep({ assignment_status: 'assigned', order: { status: 'pending' } }), null)
+  assert.equal(d.nextStep({ assignment_status: 'accepted', order: { status: 'pending' } }).status, 'en_route')
+  assert.equal(d.nextStep({ assignment_status: 'rejected', order: { status: 'pending' } }), null)
   assert.equal(d.nextStep({ assignment_status: 'arrived', order: { status: 'cancelled' } }), null)
   assert.equal(d.nextStep({ assignment_status: 'handover_complete', order: { status: 'pending' } }), null)
 })

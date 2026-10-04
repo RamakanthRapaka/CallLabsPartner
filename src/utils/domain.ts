@@ -20,7 +20,7 @@ export const timestamp = (value: string) => {
 export const addressText = (address: Address | null) => address ? [address.address_line_1, address.address_line_2, address.city, address.state, address.postal_code].filter(Boolean).join(', ') : 'Collection address unavailable'
 export const nextStep = (assignment: Assignment): { status: AssignmentStatus; label: string } | null => {
   if (['cancelled', 'completed'].includes(assignment.order.status)) return null
-  const steps: Partial<Record<AssignmentStatus, { status: AssignmentStatus; label: string }>> = { assigned: { status: 'en_route', label: 'Start journey' }, en_route: { status: 'arrived', label: 'Mark as arrived' }, arrived: { status: 'sample_collected', label: 'Confirm sample collected' }, sample_collected: { status: 'handover_complete', label: 'Confirm lab handover' } }
+  const steps: Partial<Record<AssignmentStatus, { status: AssignmentStatus; label: string }>> = { accepted: { status: 'en_route', label: 'Start journey' }, en_route: { status: 'arrived', label: 'Mark as arrived' }, arrived: { status: 'sample_collected', label: 'Confirm sample collected' }, sample_collected: { status: 'handover_complete', label: 'Confirm lab handover' } }
   return steps[assignment.assignment_status] || null
 }
 export function referralValidation(data: ReferralCreate): string | null {
