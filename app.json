@@ -29,6 +29,7 @@
     "plugins": [
       "expo-secure-store",
       "expo-document-picker",
+      "expo-splash-screen",
       "expo-location",
       ["expo-notifications", { "icon": "./assets/notification-icon.png", "color": "#008744", "defaultChannel": "partner-updates" }]
     ],
