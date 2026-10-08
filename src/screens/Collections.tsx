@@ -12,6 +12,16 @@ import { assignmentError, canRespond, decideAssignment } from '../utils/assignme
 import { collectionDateMatches, type CollectionDateFilter } from '../utils/collectionDates'
 import { CollectionTestsDetails, CollectionTestsPreview } from '../components/CollectionTests'
 
+async function captureArrivalLocation(): Promise<{ latitude: number | null; longitude: number | null }> {
+  try {
+    const Location = await import('expo-location')
+    const permission = await Location.requestForegroundPermissionsAsync()
+    if (permission.status !== 'granted') return { latitude: null, longitude: null }
+    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude }
+  } catch { return { latitude: null, longitude: null } }
+}
+
 export function Collections({ overview = false, active = true, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token, permissions } = useAuth(), resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments', active)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [open, setOpen] = useState(false), [page, setPage] = useState(1), [selected, setSelected] = useState<Assignment | null>(null)
@@ -68,6 +78,8 @@ function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assign
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const [blocked, setBlocked] = useState(false), [success, setSuccess] = useState(''), [rejecting, setRejecting] = useState(false), [reason, setReason] = useState('')
   const [confirmedStatus, setConfirmedStatus] = useState<'accepted' | 'rejected' | null>(null)
+  const [otp, setOtp] = useState(''), [otpBusy, setOtpBusy] = useState(false), [otpError, setOtpError] = useState('')
+  const [otpVerified, setOtpVerified] = useState(Boolean(assignment.collection_otp_verified || assignment.otp_verified))
   const step = nextStep(assignment), address = assignment.order.collection_address
   async function refreshDetail() {
     if (updating.current) return
@@ -108,10 +120,30 @@ function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assign
       const latest = (await api.assignments(token!)).find(a => a.id === assignment.id)
       if (!alive.current) return
       if (!latest || nextStep(latest)?.status !== step!.status) { setError('This assignment changed. Close and refresh the list before updating.'); return }
-      const updated = await api.updateAssignment(token!, assignment.id, step!.status, notes)
+      let updated: Assignment
+      if (step!.status === 'arrived') {
+        const location = await captureArrivalLocation()
+        updated = await api.markArrived(token!, assignment.id, { ...location, arrived_at: new Date().toISOString() })
+        setSuccess('Arrival recorded. Ask the customer for the OTP sent to their mobile number.')
+      } else {
+        if (step!.status === 'sample_collected' && !otpVerified) { setError('Verify the customer OTP before collecting the sample.'); return }
+        updated = await api.updateAssignment(token!, assignment.id, step!.status, notes)
+      }
       if (!alive.current) return
       onUpdated(updated); resourceCache.invalidate(`timeline-${assignment.order.id}`); resourceCache.invalidate('agent-referrals')
     } catch (e) { if (alive.current) setError(assignmentError(e)) } finally { updating.current = false; if (alive.current) setBusy(false) }
+  }
+  async function verifyOtp() {
+    if (otpBusy || !/^\d{6}$/.test(otp)) { setOtpError('Enter the 6-digit OTP sent to the customer.'); return }
+    setOtpBusy(true); setOtpError(''); setError('')
+    try { const updated = await api.verifyCollectionOtp(token!, assignment.id, otp); if (!alive.current) return; setOtpVerified(true); onUpdated(updated); setSuccess('Customer OTP verified. You can now collect the sample.'); resourceCache.invalidate('agent-assignments') }
+    catch (e) { if (alive.current) setOtpError(assignmentError(e)) } finally { if (alive.current) setOtpBusy(false) }
+  }
+  async function resendOtp() {
+    if (otpBusy) return
+    setOtpBusy(true); setOtpError('')
+    try { await api.resendCollectionOtp(token!, assignment.id); if (alive.current) setSuccess('A new OTP was sent to the customer.') }
+    catch (e) { if (alive.current) setOtpError(assignmentError(e)) } finally { if (alive.current) setOtpBusy(false) }
   }
   async function openLink(url: string) { try { await Linking.openURL(url) } catch { Alert.alert('Unable to open', 'Check that the required calling or maps app is available.') } }
   return <Sheet visible title={assignment.order.order_number} onClose={() => { if (!busy) onClose() }}>
@@ -121,11 +153,12 @@ function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assign
     {address?.phone_number ? <><Button label="Call customer" secondary icon="phone" onPress={() => Alert.alert('Call customer?', 'This uses your phone dialler. Number masking is not enabled yet.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Open dialler', onPress: () => void openLink(`tel:${address.phone_number!.replace(/[^+\d]/g, '')}`) }])} /></> : null}
     {address ? <Button label="Open directions" secondary icon="map-pin" onPress={() => void openLink(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressText(address))}`)} /> : null}
     <ErrorNotice error={error} />
+    {assignment.assignment_status === 'arrived' && !otpVerified ? <View style={s.card}><Text style={s.title}>Customer verification</Text><Text style={s.muted}>Ask the customer for the 6-digit OTP sent to their mobile before collecting the sample.</Text><Field label="Customer OTP" value={otp} onChangeText={v => { setOtp(v.replace(/\D/g, '').slice(0, 6)); setOtpError('') }} keyboardType="number-pad" maxLength={6} /><ErrorNotice error={otpError} /><Button label="Verify OTP" disabled={busy || otpBusy || !/^\d{6}$/.test(otp)} busy={otpBusy} onPress={() => void verifyOtp()} /><Button label="Resend OTP" secondary disabled={busy || otpBusy} busy={otpBusy} onPress={() => void resendOtp()} /></View> : null}
     {success ? <Text accessibilityLiveRegion="polite" style={s.text}>{success}</Text> : null}
     <Button label="Refresh assignment details" secondary busy={busy} onPress={() => void refreshDetail()} />
     {!confirmedStatus && canRespond(assignment, writable) ? <><Field label="Acceptance note (optional)" value={notes} onChangeText={setNotes} multiline maxLength={255} /><Button label="Accept assignment" disabled={blocked || busy} busy={busy} onPress={() => void respond('accept')} /><Button label="Reject assignment" secondary disabled={blocked || busy} onPress={() => setRejecting(true)} />
       {rejecting ? <View style={s.card}><Field label="Rejection reason (optional)" value={reason} onChangeText={setReason} multiline maxLength={255} /><Button label="Confirm rejection" secondary disabled={blocked || busy} onPress={() => Alert.alert('Reject this assignment?', 'The administrator will see your rejection and any reason you entered.', [{ text: 'Keep assignment', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: () => void respond('reject') }])} /><Button label="Keep assignment" secondary disabled={busy} onPress={() => setRejecting(false)} /></View> : null}</> : null}
-    {step && writable ? <><Field label="Collection note (optional)" value={notes} onChangeText={setNotes} multiline maxLength={255} /><Button label={step.label} disabled={busy || blocked} busy={busy} onPress={() => Alert.alert(step.label + '?', 'Confirm that this collection step has actually been completed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Confirm', onPress: () => void update() }])} /></> : !canRespond(assignment, writable) ? <Text style={s.muted}>{!writable ? 'Read-only access. Contact your administrator for update permission.' : 'No further collection step available.'}</Text> : null}
+    {step && writable && (step.status !== 'sample_collected' || otpVerified) ? <><Field label="Collection note (optional)" value={notes} onChangeText={setNotes} multiline maxLength={255} /><Button label={step.label} disabled={busy || blocked} busy={busy} onPress={() => Alert.alert(step.label + '?', 'Confirm that this collection step has actually been completed.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Confirm', onPress: () => void update() }])} /></> : step?.status === 'sample_collected' && writable && !otpVerified ? <Text style={s.muted}>Verify the customer OTP before collecting the sample.</Text> : !canRespond(assignment, writable) ? <Text style={s.muted}>{!writable ? 'Read-only access. Contact your administrator for update permission.' : 'No further collection step available.'}</Text> : null}
     <Text style={s.title}>Activity timeline</Text><ErrorNotice error={events.error} />{events.loading ? <Loading /> : null}
     {events.data?.items.map(e => <View key={e.id} style={s.card}><Text style={s.title}>{e.title}</Text><Text style={s.text}>{e.description}</Text><Text style={s.muted}>{timestamp(e.created_at)} {e.actor_name ? `· ${e.actor_name}` : ''}</Text></View>)}
     {events.error ? <Button label="Retry timeline" secondary onPress={() => void events.refresh()} /> : null}

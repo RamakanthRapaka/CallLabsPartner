@@ -60,6 +60,9 @@ export const api = {
   updateAssignment: (token: string, id: number, assignment_status: AssignmentStatus, notes: string) => request<Assignment>(`/admin/collection-agent/assignments/${id}`, token, json('PATCH', { assignment_status, notes: notes.trim() || null })),
   acceptAssignment: (token: string, id: number, notes = '') => request<unknown>(`/admin/collection-agent/assignments/${id}/accept`, token, json('POST', notes.trim() ? { notes: notes.trim() } : {})),
   rejectAssignment: (token: string, id: number, notes = '') => request<unknown>(`/admin/collection-agent/assignments/${id}/reject`, token, json('POST', notes.trim() ? { notes: notes.trim() } : {})),
+  markArrived: (token: string, id: number, payload: { latitude: number | null; longitude: number | null; arrived_at: string }) => request<Assignment>(`/partner/assignments/${id}/arrived`, token, json('POST', payload)),
+  verifyCollectionOtp: (token: string, id: number, otp: string) => request<Assignment>(`/partner/assignments/${id}/verify-collection-otp`, token, json('POST', { otp })),
+  resendCollectionOtp: (token: string, id: number) => request<{ message: string }>(`/partner/assignments/${id}/resend-collection-otp`, token, json('POST', {})),
   timeline: (token: string, orderId: number) => request<{ items: Tracking[] }>('/admin/orders/' + orderId + '/tracking-events', token),
   operationalReferrals: (token: string) => request<ReferralDashboard>('/operational/referrals/dashboard', token),
 }
