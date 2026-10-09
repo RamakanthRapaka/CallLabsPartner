@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons'
 import { Alert, BackHandler, Pressable, Text, View } from 'react-native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
+import * as SplashScreen from 'expo-splash-screen'
 import { AuthProvider, useAuth } from './src/auth/AuthContext'
 import { Button, colors, ErrorNotice, Header, Loading, Page, s, Sheet } from './src/components/ui'
 import { PasswordForm } from './src/screens/Passwords'
@@ -14,6 +15,8 @@ import { resourceCache } from './src/cache/resources'
 import { PartnerNotifications } from './src/push/Notifications'
 import type { AssignmentTarget } from './src/push/lifecycle'
 
+void SplashScreen.preventAutoHideAsync().catch(() => undefined)
+
 export default function App() { return <SafeAreaProvider><AuthProvider><SafeAreaView style={[s.flex, { backgroundColor: colors.bg }]}><StatusBar style="dark" /><Workspace /></SafeAreaView></AuthProvider></SafeAreaProvider> }
 function Workspace() {
   const auth = useAuth(), [tab, setTab] = useState(''), [create, setCreate] = useState(false)
@@ -24,6 +27,7 @@ function Workspace() {
   const current = tabs.some(t => t.key === tab) ? tab : tabs[0].key
   function leaveCreate() { Alert.alert('Discard referral draft?', 'Unsaved patient information will be discarded.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: () => setCreate(false) }]) }
   useEffect(() => { setTab(''); setCreate(false); setChangingPassword(false); setAssignmentTarget(null) }, [auth.user?.id])
+  useEffect(() => { if (!auth.loading) void SplashScreen.hideAsync().catch(() => undefined) }, [auth.loading])
   useEffect(() => { const listener = BackHandler.addEventListener('hardwareBackPress', () => { if (create) { leaveCreate(); return true } if (current !== tabs[0].key) { setTab(tabs[0].key); return true } return false }); return () => listener.remove() }, [create, current, tabs[0].key])
   if (auth.loading) return <Loading />
   if (!auth.user || !auth.token) return <><Login />{auth.error ? <View style={{ padding: 16 }}><Button label="Retry saved session" secondary onPress={() => void auth.refresh()} /></View> : null}</>
