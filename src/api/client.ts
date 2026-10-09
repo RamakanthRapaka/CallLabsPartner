@@ -1,4 +1,4 @@
-import type { Assignment, AssignmentStatus, Catalog, Permission, Referral, ReferralCreate, ReferralDashboard, Session, Tracking, User } from './types'
+import type { Assignment, AssignmentRequest, AssignmentStatus, Catalog, Permission, Referral, ReferralCreate, ReferralDashboard, Session, Tracking, User } from './types'
 
 export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://api.calllabs.in/api/v1').replace(/\/+$/, '')
 export class ApiError extends Error {
@@ -57,6 +57,9 @@ export const api = {
       if (page.length < 100) return all
     }
   },
+  assignmentRequests: (token: string) => request<AssignmentRequest[]>('/admin/collection-agent/assignment-requests', token),
+  acceptAssignmentRequest: (token: string, id: number) => request<Assignment>(`/admin/collection-agent/assignment-requests/${id}/accept`, token, json('POST', {})),
+  rejectAssignmentRequest: (token: string, id: number) => request<AssignmentRequest>(`/admin/collection-agent/assignment-requests/${id}/reject`, token, json('POST', {})),
   updateAssignment: (token: string, id: number, assignment_status: AssignmentStatus, notes: string) => request<Assignment>(`/admin/collection-agent/assignments/${id}`, token, json('PATCH', { assignment_status, notes: notes.trim() || null })),
   acceptAssignment: (token: string, id: number, notes = '') => request<unknown>(`/admin/collection-agent/assignments/${id}/accept`, token, json('POST', notes.trim() ? { notes: notes.trim() } : {})),
   rejectAssignment: (token: string, id: number, notes = '') => request<unknown>(`/admin/collection-agent/assignments/${id}/reject`, token, json('POST', notes.trim() ? { notes: notes.trim() } : {})),
