@@ -7,7 +7,7 @@ import { Badge, s } from './ui'
 
 export function FastingBadge({ value, packageLevel = false }: { value?: boolean | null; packageLevel?: boolean }) {
   const required = value === true, known = required || value === false
-  const label = `${packageLevel ? 'Package fasting' : 'Fasting'} ${required ? 'required' : known ? 'not required' : 'not provided'}`
+  const label = `${packageLevel ? 'Package fasting' : 'Fasting'} ${required ? 'required' : known ? 'not required' : 'information unavailable'}`
   const color = required ? '#854D0E' : known ? '#166534' : '#475569'
   return <View accessible accessibilityLabel={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start', backgroundColor: required ? '#FEF3C7' : known ? '#DCFCE7' : '#F1F5F9', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, maxWidth: '100%' }}>
     {required ? <MaterialCommunityIcons name="food-off" size={18} color={color} accessible={false} /> : <Feather name={known ? 'check-circle' : 'help-circle'} size={17} color={color} accessible={false} />}

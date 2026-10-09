@@ -12,6 +12,15 @@ import { assignmentError, canRespond, decideAssignment } from '../utils/assignme
 import { collectionDateMatches, type CollectionDateFilter } from '../utils/collectionDates'
 import { CollectionTestsDetails, CollectionTestsPreview } from '../components/CollectionTests'
 
+const statusOrder: Record<string, number> = { assigned: 0, accepted: 1, en_route: 2, arrived: 3, sample_collected: 4, handover_complete: 5, rejected: 6 }
+function slotMinutes(slot: string) {
+  const match = slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+  if (!match) return Number.MAX_SAFE_INTEGER
+  let hour = Number(match[1]) % 12
+  if (match[3].toUpperCase() === 'PM') hour += 12
+  return hour * 60 + Number(match[2])
+}
+
 async function captureArrivalLocation(): Promise<{ latitude: number | null; longitude: number | null }> {
   try {
     const Location = await import('expo-location')
@@ -26,11 +35,6 @@ export function Collections({ overview = false, active = true, assignmentTarget,
   const { token, permissions } = useAuth(), resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments', active)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [open, setOpen] = useState(false), [page, setPage] = useState(1), [selected, setSelected] = useState<Assignment | null>(null)
   const [dateFilter, setDateFilter] = useState<CollectionDateFilter>('all'), [dateOpen, setDateOpen] = useState(false), [dateNow, setDateNow] = useState(new Date())
-  const [requests, setRequests] = useState<AssignmentRequest[]>([]), [requestBusy, setRequestBusy] = useState(false), [requestError, setRequestError] = useState('')
-  const loadRequests = useCallback(async () => { if (!token || overview) return; setRequestBusy(true); setRequestError(''); try { setRequests(await api.assignmentRequests(token)) } catch (e) { setRequestError(assignmentError(e)) } finally { setRequestBusy(false) } }, [token, overview])
-  useEffect(() => { void loadRequests() }, [loadRequests, active])
-  const acceptRequest = async (row: AssignmentRequest) => { setRequestBusy(true); try { const accepted = await api.acceptAssignmentRequest(token!, row.id); setRequests(current => current.filter(item => item.id !== row.id)); setSelected(accepted); resourceCache.invalidate('agent-assignments'); Alert.alert('Assignment accepted', 'Customer contact and address details are now available.') } catch (e) { Alert.alert('Could not accept request', assignmentError(e)); await loadRequests(); resourceCache.invalidate('agent-assignments') } finally { setRequestBusy(false) } }
-  const rejectRequest = async (row: AssignmentRequest) => { Alert.alert('Reject this request?', 'Customer contact and address details are hidden until acceptance.', [{ text: 'Keep', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: async () => { setRequestBusy(true); try { await api.rejectAssignmentRequest(token!, row.id); setRequests(current => current.filter(item => item.id !== row.id)); Alert.alert('Request rejected', 'The assignment request was rejected.') } catch (e) { Alert.alert('Could not reject request', assignmentError(e)); await loadRequests() } finally { setRequestBusy(false) } } }]) }
   useEffect(() => {
     if (!active || overview) return
     const refreshDay = () => setDateNow(new Date())
@@ -48,7 +52,6 @@ export function Collections({ overview = false, active = true, assignmentTarget,
     let alive = true
     if (assignmentTarget.eventType === 'booking_assignment_request') {
       resourceCache.invalidate('agent-assignments')
-      void loadRequests()
       onAssignmentOpened?.()
       return () => { alive = false }
     }
@@ -62,7 +65,7 @@ export function Collections({ overview = false, active = true, assignmentTarget,
     }).catch(error => { if (alive) setLinkError(assignmentError(error)) }).finally(() => { if (alive) setLinkBusy(false) })
     return () => { alive = false }
   }, [active, assignmentTarget, token, linkRetry])
-  const rows = (resource.data || []).filter(a => collectionDateMatches(a.order.collection_date, dateFilter, dateNow) && (status === 'all' || a.assignment_status === status) && [a.order.order_number, a.order.collection_address?.full_name, ...(a.order.tests || []), ...(a.order.test_details || []).map(t => t.name), ...(a.order.package_details || []).map(p => p.name)].join(' ').toLowerCase().includes(query.toLowerCase()))
+  const rows = (resource.data || []).filter(a => collectionDateMatches(a.order.collection_date, dateFilter, dateNow) && (status === 'all' || a.assignment_status === status) && [a.order.order_number, a.order.collection_address?.full_name, ...(a.order.tests || []), ...(a.order.test_details || []).map(t => t.name), ...(a.order.package_details || []).map(p => p.name)].join(' ').toLowerCase().includes(query.toLowerCase())).sort((a, b) => a.order.collection_date.localeCompare(b.order.collection_date) || slotMinutes(a.order.collection_slot) - slotMinutes(b.order.collection_slot) || (statusOrder[a.assignment_status] ?? 99) - (statusOrder[b.assignment_status] ?? 99) || a.id - b.id)
   const count = Math.max(1, Math.ceil(rows.length / 6)), current = Math.min(page, count)
   return <><Page refreshing={resource.loading} onRefresh={resource.refresh}>
     <ErrorNotice error={linkError} />{linkBusy ? <Loading label="Opening assignment…" /> : null}
@@ -70,7 +73,6 @@ export function Collections({ overview = false, active = true, assignmentTarget,
     <ErrorNotice error={resource.error} />{resource.error ? <Button label="Retry" secondary onPress={() => void resource.refresh()} /> : null}
     {resource.loading && !resource.data ? <Loading /> : null}
     {overview ? <><Text style={s.title}>Your route overview</Text>{['assigned', 'accepted', 'rejected', 'en_route', 'arrived', 'sample_collected', 'handover_complete'].map(v => <View key={v} style={[s.card, s.between]}><Text style={s.text}>{readable(v)}</Text><Text style={s.title}>{(resource.data || []).filter(a => a.assignment_status === v).length}</Text></View>)}</> : <>
-      <View style={s.card}><View style={s.between}><Text style={s.title}>Assignment requests</Text><Button label="Refresh" secondary disabled={requestBusy} onPress={() => void loadRequests()} /></View><Text style={s.muted}>Customer contact and address details are available after you accept an assignment.</Text><ErrorNotice error={requestError} />{!requests.length && !requestBusy ? <Text style={s.muted}>No pending requests.</Text> : null}{requests.map(row => <View key={row.id} style={s.card}><View style={s.between}><Text style={s.text}>Order #{row.order_id}</Text><Badge label={readable(row.status)} /></View><Text style={s.muted}>Expires {new Date(row.expires_at).toLocaleString()}</Text>{row.status === 'pending' ? <View style={s.between}><Button label="Accept" disabled={requestBusy} onPress={() => void acceptRequest(row)} /><Button label="Reject" secondary disabled={requestBusy} onPress={() => void rejectRequest(row)} /></View> : null}</View>)}</View>
       <Field label="Search assigned collections" placeholder="Booking, patient or test" value={query} onChangeText={v => { setQuery(v); setPage(1) }} />
       <Picker label="Collection date" value={dateFilter} options={[{ value: 'all', label: 'All dates' }, { value: 'today', label: 'Today' }, { value: 'tomorrow', label: 'Tomorrow' }, { value: 'upcoming', label: 'Upcoming (after tomorrow)' }]} open={dateOpen} onToggle={() => { setDateOpen(!dateOpen); setOpen(false) }} onChange={v => { setDateFilter(v as CollectionDateFilter); setDateNow(new Date()); setPage(1); setDateOpen(false) }} />
       <Text style={s.muted}>Based on the scheduled collection date (India time). Upcoming means after tomorrow.</Text>
@@ -81,6 +83,16 @@ export function Collections({ overview = false, active = true, assignmentTarget,
       <Pagination page={current} count={count} onChange={setPage} />
     </>}
   </Page>{active && selected ? <CollectionDetail key={selected.id} assignment={selected} writable={canWrite(permissions, 'orders')} onClose={() => setSelected(null)} onUpdated={a => { setSelected(a); resourceCache.invalidate('agent-assignments') }} /> : null}</>
+}
+export function AssignmentRequests({ active = true, assignmentTarget, onAssignmentOpened }: { active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
+  const { token } = useAuth()
+  const [rows, setRows] = useState<AssignmentRequest[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const load = useCallback(async () => { if (!token) return; setBusy(true); setError(''); try { setRows(await api.assignmentRequests(token)) } catch (e) { setError(assignmentError(e)) } finally { setBusy(false) } }, [token])
+  useEffect(() => { if (active) void load() }, [active, load])
+  useEffect(() => { if (active && assignmentTarget?.eventType === 'booking_assignment_request') { void load(); onAssignmentOpened?.() } }, [active, assignmentTarget, load, onAssignmentOpened])
+  const accept = async (row: AssignmentRequest) => { setBusy(true); try { await api.acceptAssignmentRequest(token!, row.id); Alert.alert('Assignment accepted', 'Customer contact and address details are now available.'); await load(); resourceCache.invalidate('agent-assignments') } catch (e) { Alert.alert('Could not accept request', assignmentError(e)); await load() } finally { setBusy(false) } }
+  const reject = (row: AssignmentRequest) => Alert.alert('Reject this request?', 'Customer contact and address details are hidden until acceptance.', [{ text: 'Keep', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: async () => { setBusy(true); try { await api.rejectAssignmentRequest(token!, row.id); Alert.alert('Request rejected', 'The assignment request was rejected.'); await load() } catch (e) { Alert.alert('Could not reject request', assignmentError(e)); await load() } finally { setBusy(false) } } }])
+  return <Page refreshing={busy} onRefresh={load}><Text style={s.title}>Assignment requests</Text><Text style={s.muted}>Review nearby collection requests. Customer contact and address details are available only after you accept.</Text><ErrorNotice error={error} />{busy && !rows.length ? <Loading label="Loading requests…" /> : null}{!busy && !rows.length ? <Empty title="No assignment requests" detail="New requests matching your serviceable area will appear here." /> : null}{rows.map(row => <View key={row.id} style={[s.card, { gap: 8 }]}><View style={s.between}><Text style={s.title}>Order #{row.order_id}</Text><Badge label={readable(row.status)} /></View><Text style={s.muted}>Request expires {new Date(row.expires_at).toLocaleString()}</Text>{row.status === 'pending' ? <View style={s.between}><Button label="Accept request" disabled={busy} onPress={() => void accept(row)} /><Button label="Reject" secondary disabled={busy} onPress={() => reject(row)} /></View> : null}</View>)}</Page>
 }
 function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assignment: Assignment; writable: boolean; onClose: () => void; onUpdated: (a: Assignment) => void }) {
   const { token } = useAuth(), events = useResource(useCallback(() => api.timeline(token!, assignment.order.id), [token, assignment.order.id]), `timeline-${assignment.order.id}`)

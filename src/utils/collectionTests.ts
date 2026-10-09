@@ -14,7 +14,7 @@ export function collectionEntries(order: AssignmentOrder): CollectionEntry[] {
   }
   return entries
 }
-export const fastingText = (value: boolean | null | undefined) => value === true ? 'Required' : value === false ? 'Not required' : 'Not provided — confirm with laboratory'
+export const fastingText = (value: boolean | null | undefined) => value === true ? 'Required' : value === false ? 'Not required' : 'Information unavailable — confirm with laboratory'
 export const instructionText = (value?: string | null) => value?.trim() || 'Not provided — confirm with laboratory'
 
 export function collectionFasting(order: AssignmentOrder): boolean | undefined {
