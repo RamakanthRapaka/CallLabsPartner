@@ -1,20 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { resourceCache } from '../cache/resources'
-import { Alert, AppState, Linking, Text, View } from 'react-native'
+import { Alert, AppState, Linking, Pressable, Text, View } from 'react-native'
 import { api } from '../api/client'
 import type { Assignment, AssignmentRequest } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
-import { Badge, Button, Empty, ErrorNotice, Field, Loading, Page, Pagination, Picker, s, Sheet } from '../components/ui'
+import { Badge, Button, colors, Empty, ErrorNotice, Field, Loading, Page, Pagination, Picker, s, Sheet } from '../components/ui'
 import { useResource } from '../hooks/useResource'
 import { addressText, canWrite, dateText, nextStep, readable, timestamp } from '../utils/domain'
 import type { AssignmentTarget } from '../push/lifecycle'
 import { assignmentError, canRespond, decideAssignment } from '../utils/assignmentActions'
 import { collectionDateMatches, type CollectionDateFilter } from '../utils/collectionDates'
-import { CollectionTestsDetails, CollectionTestsPreview } from '../components/CollectionTests'
+import { CollectionTestsDetails } from '../components/CollectionTests'
 
 const statusOrder: Record<string, number> = { assigned: 0, accepted: 1, en_route: 2, arrived: 3, sample_collected: 4, handover_complete: 5, rejected: 6 }
-function slotMinutes(slot: string) {
-  const match = slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
+function slotMinutes(slot?: string | null) {
+  const match = (slot || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
   if (!match) return Number.MAX_SAFE_INTEGER
   let hour = Number(match[1]) % 12
   if (match[3].toUpperCase() === 'PM') hour += 12
@@ -79,10 +79,57 @@ export function Collections({ overview = false, active = true, assignmentTarget,
       <Picker label="Collection status" value={status} options={['all', 'assigned', 'accepted', 'rejected', 'en_route', 'arrived', 'sample_collected', 'handover_complete'].map(v => ({ value: v, label: v === 'all' ? 'All statuses' : readable(v) }))} open={open} onToggle={() => { setOpen(!open); setDateOpen(false) }} onChange={v => { setStatus(v); setPage(1); setOpen(false) }} />
       <Text style={s.muted}>{rows.length} {rows.length === 1 ? 'collection matches' : 'collections match'} your filters.</Text>
       {!resource.loading && !rows.length ? <Empty title="No matching collections" detail="Try All dates, another status or a different search. New assignments from your administrator will appear here." /> : null}
-      {rows.slice((current - 1) * 6, current * 6).map(a => <View key={a.id} style={s.card}><View style={s.between}><Text style={s.title}>{a.order.order_number}</Text><Badge label={readable(a.assignment_status)} /></View><Text style={s.text}>{a.order.collection_address?.full_name || 'Customer'}</Text><Text style={s.muted}>{dateText(a.order.collection_date)} · {a.order.collection_slot}</Text><Text style={s.text}>{addressText(a.order.collection_address)}</Text><Text style={s.muted}>Order: {readable(a.order.status)} · Payment: {readable(a.order.payment_status)}</Text><CollectionTestsPreview order={a.order} /><Button label="View collection" secondary onPress={() => setSelected(a)} /></View>)}
+      {rows.slice((current - 1) * 6, current * 6).map(a => <View key={a.id} style={s.card}><View style={s.between}><Text style={s.title}>{a.order.order_number}</Text><Badge label={readable(a.assignment_status)} /></View><Text style={s.text}>{a.order.collection_address?.full_name || 'Customer'}</Text><Text style={s.muted}>{dateText(a.order.collection_date)} · {a.order.collection_slot}</Text><Button label="View collection" secondary onPress={() => setSelected(a)} /></View>)}
       <Pagination page={current} count={count} onChange={setPage} />
     </>}
   </Page>{active && selected ? <CollectionDetail key={selected.id} assignment={selected} writable={canWrite(permissions, 'orders')} onClose={() => setSelected(null)} onUpdated={a => { setSelected(a); resourceCache.invalidate('agent-assignments') }} /> : null}</>
+}
+
+/** A calm landing page for collection agents; operational details remain in Collections. */
+export function CollectionAgentHome({ active = true, onOpenCollections, onOpenRequests }: { active?: boolean; onOpenCollections: () => void; onOpenRequests: () => void }) {
+  const { token, user } = useAuth()
+  const resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments-home', active)
+  const rows = resource.data || []
+  const today = new Date().toISOString().slice(0, 10)
+  const todayRows = rows.filter(row => row.order.collection_date === today)
+  const pending = rows.filter(row => row.assignment_status === 'assigned').length
+  const completed = todayRows.filter(row => row.assignment_status === 'handover_complete').length
+  return <Page refreshing={resource.loading} onRefresh={resource.refresh}>
+    <Text style={s.title}>Hello {user?.full_name?.split(' ')[0] || 'there'}</Text>
+    <Text style={s.muted}>Here is your collection overview.</Text>
+    <Pressable accessibilityRole="button" onPress={onOpenCollections} style={[s.card, { backgroundColor: '#e9f8ef', borderColor: '#b9e7c9' }]}>
+      <Text style={[s.muted, { color: colors.green, fontWeight: '800' }]}>TODAY'S VISITS</Text>
+      <Text style={[s.title, { fontSize: 28, marginTop: 4 }]}>{todayRows.length}</Text>
+      <Text style={s.muted}>{completed} completed · {todayRows.length - completed} remaining</Text>
+      <Button label="View today's collections" onPress={onOpenCollections} />
+    </Pressable>
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <Pressable accessibilityRole="button" onPress={onOpenRequests} style={[s.card, { flex: 1, alignItems: 'center' }]}><Text style={[s.title, { color: colors.green }]}>{pending}</Text><Text style={s.muted}>Pending requests</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={onOpenCollections} style={[s.card, { flex: 1, alignItems: 'center' }]}><Text style={[s.title, { color: colors.green }]}>{rows.length}</Text><Text style={s.muted}>All collections</Text></Pressable>
+    </View>
+    <View style={s.card}>
+      <Text style={s.title}>Quick actions</Text>
+      <Button label="Assignment requests" icon="inbox" secondary onPress={onOpenRequests} />
+      <Button label="All collections" icon="map-pin" secondary onPress={onOpenCollections} />
+      <Text style={s.muted}>Customer contact and address details are available after you accept an assignment.</Text>
+    </View>
+  </Page>
+}
+
+export function CollectionReports({ active = true }: { active?: boolean }) {
+  const { token } = useAuth()
+  const resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments-reports', active)
+  const [selectedMonth, setSelectedMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
+  const months = Array.from({ length: 3 }, (_, index) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - index); return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) } })
+  const completed = (resource.data || []).filter(row => row.assignment_status === 'handover_complete' && row.order.collection_date?.startsWith(selectedMonth)).sort((a, b) => b.order.collection_date.localeCompare(a.order.collection_date))
+  return <Page refreshing={resource.loading} onRefresh={resource.refresh}>
+    <Text style={s.title}>Collection reports</Text>
+    <Text style={s.muted}>Completed collections for the last three months.</Text>
+    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>{months.map(month => <Button key={month.key} label={month.label} secondary={selectedMonth !== month.key} onPress={() => setSelectedMonth(month.key)} />)}</View>
+    <View style={[s.card, { backgroundColor: '#e9f8ef', borderColor: '#b9e7c9' }]}><Text style={s.muted}>COMPLETED IN {months.find(month => month.key === selectedMonth)?.label.toUpperCase()}</Text><Text style={[s.title, { fontSize: 30, color: colors.green }]}>{completed.length}</Text><Text style={s.muted}>completed bookings</Text></View>
+    {!resource.loading && !completed.length ? <Empty title="No completed collections" detail="Completed collections for this month will appear here." /> : null}
+    {completed.map(row => <View key={row.id} style={[s.card, s.between]}><View><Text style={s.title}>{row.order.order_number}</Text><Text style={s.muted}>{dateText(row.order.collection_date)}</Text></View><Badge label="Completed" /></View>)}
+  </Page>
 }
 export function AssignmentRequests({ active = true, assignmentTarget, onAssignmentOpened }: { active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token } = useAuth()
@@ -154,13 +201,19 @@ function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assign
         updated = await api.updateAssignment(token!, assignment.id, step!.status, notes)
       }
       if (!alive.current) return
-      onUpdated(updated); resourceCache.invalidate(`timeline-${assignment.order.id}`); resourceCache.invalidate('agent-referrals')
+      // Some status endpoints return a partial assignment without the nested
+      // order. Refresh the full assignment before replacing the detail state;
+      // otherwise CollectionDetail would render assignment.order.id on an
+      // incomplete response and crash the native app.
+      const refreshed = (await api.assignments(token!)).find(a => a.id === assignment.id && a.order.id === assignment.order.id)
+      onUpdated(refreshed || { ...assignment, ...updated, order: updated.order || assignment.order })
+      resourceCache.invalidate(`timeline-${assignment.order.id}`); resourceCache.invalidate('agent-referrals')
     } catch (e) { if (alive.current) setError(assignmentError(e)) } finally { updating.current = false; if (alive.current) setBusy(false) }
   }
   async function verifyOtp() {
     if (otpBusy || !/^\d{6}$/.test(otp)) { setOtpError('Enter the 6-digit OTP sent to the customer.'); return }
     setOtpBusy(true); setOtpError(''); setError('')
-    try { const updated = await api.verifyCollectionOtp(token!, assignment.id, otp); if (!alive.current) return; setOtpVerified(true); onUpdated(updated); setSuccess('Customer OTP verified. You can now collect the sample.'); resourceCache.invalidate('agent-assignments') }
+    try { const updated = await api.verifyCollectionOtp(token!, assignment.id, otp); if (!alive.current) return; setOtpVerified(true); onUpdated({ ...assignment, ...updated, order: updated.order || assignment.order }); setSuccess('Customer OTP verified. You can now collect the sample.'); resourceCache.invalidate('agent-assignments') }
     catch (e) { if (alive.current) setOtpError(assignmentError(e)) } finally { if (alive.current) setOtpBusy(false) }
   }
   async function resendOtp() {
