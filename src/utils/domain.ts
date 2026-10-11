@@ -7,15 +7,19 @@ export const readable = (value?: string | null) => {
   const names: Record<string, string> = { en_route: 'On the way', handover_complete: 'Handed to lab', converted: 'Booked', awaiting_lab_assignment: 'Awaiting lab assignment', awaiting_lab_review: 'Awaiting lab review' }
   return names[value || ''] || (value || 'Not available').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
 }
+export function formatIndiaDateTime(value?: string | null): string {
+  if (!value) return '-'
+  const raw = String(value).trim()
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : `${raw.replace(' ', 'T')}Z`
+  const date = new Date(normalized)
+  if (Number.isNaN(date.getTime())) return '-'
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }).format(date).replace(/\b(am|pm)\b/i, marker => marker.toUpperCase())
+}
+export const timestamp = (value?: string | null) => formatIndiaDateTime(value)
 export const dateText = (value?: string | null) => {
   if (!value) return 'Not scheduled'
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
-  return match ? `${match[3]}-${match[2]}-${match[1]}` : value
-}
-export const timestamp = (value: string) => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Date unavailable'
-  return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()} · ${date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+  const formatted = formatIndiaDateTime(`${String(value).slice(0, 10)} 00:00:00`)
+  return formatted === '-' ? 'Not scheduled' : formatted.split(',')[0]
 }
 export const addressText = (address: Address | null) => address ? [address.address_line_1, address.address_line_2, address.city, address.state, address.postal_code].filter(Boolean).join(', ') : 'Collection address unavailable'
 export const nextStep = (assignment: Assignment): { status: AssignmentStatus; label: string } | null => {
