@@ -19,7 +19,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
 export default function App() { return <SafeAreaProvider><AuthProvider><SafeAreaView style={[s.flex, { backgroundColor: colors.bg }]}><StatusBar style="dark" /><Workspace /></SafeAreaView></AuthProvider></SafeAreaProvider> }
 function Workspace() {
-  const auth = useAuth(), [tab, setTab] = useState(''), [create, setCreate] = useState(false)
+  const auth = useAuth(), [tab, setTab] = useState(''), [create, setCreate] = useState(false), [focusToday, setFocusToday] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
   const [assignmentTarget, setAssignmentTarget] = useState<AssignmentTarget | null>(null)
   const doctor = auth.user?.role === 'doctor'
@@ -36,21 +36,21 @@ function Workspace() {
     <PartnerNotifications showStatus={current === 'account' && !create} onAssignment={target => { setCreate(false); setChangingPassword(false); setTab(target.eventType === 'booking_assignment_request' ? 'requests' : 'orders'); setAssignmentTarget(target) }} />
     <Header title={create ? 'New referral' : current === 'patients' ? 'Patient referrals' : tabs.find(t => t.key === current)!.label} onBack={create ? leaveCreate : undefined} />
     {auth.error ? <View style={{ padding: 12 }}><ErrorNotice error={auth.error} /><Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
-    <RetainedWorkspace key={`${auth.user.id}-${resourceCache.epoch}`} tabs={tabs} current={current} create={doctor && create} onCreate={() => setCreate(true)} onDone={() => { setCreate(false); setTab('patients') }} onPassword={() => setChangingPassword(true)} onTab={setTab} assignmentTarget={assignmentTarget} onAssignmentOpened={() => setAssignmentTarget(null)} />
+    <RetainedWorkspace key={`${auth.user.id}-${resourceCache.epoch}`} tabs={tabs} current={current} create={doctor && create} focusToday={focusToday} onCreate={() => setCreate(true)} onDone={() => { setCreate(false); setTab('patients') }} onPassword={() => setChangingPassword(true)} onTab={tabKey => { setFocusToday(false); setTab(tabKey) }} onOpenToday={() => { setFocusToday(true); setTab('orders') }} assignmentTarget={assignmentTarget} onAssignmentOpened={() => setAssignmentTarget(null)} />
     {changingPassword ? <Sheet visible title="Account security" onClose={() => setChangingPassword(false)}><PasswordForm mode="change" onDone={() => setChangingPassword(false)} onCancel={() => setChangingPassword(false)} /></Sheet> : null}
     {!create ? <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderColor: colors.border }}>{tabs.map(t => <Pressable key={t.key} accessibilityRole="tab" accessibilityState={{ selected: current === t.key }} onPress={() => setTab(t.key)} style={{ flex: 1, minHeight: 60, justifyContent: 'center', alignItems: 'center', padding: 4, gap: 4 }}><Feather name={t.key === 'account' ? 'user' : t.key === 'home' ? 'home' : t.key === 'orders' ? 'map-pin' : t.key === 'requests' ? 'inbox' : t.key === 'reports' ? 'file-text' : t.key === 'overview' ? 'bar-chart-2' : 'file-text'} size={21} color={current === t.key ? colors.green : colors.muted} /><Text style={{ color: current === t.key ? colors.green : colors.muted, fontWeight: current === t.key ? '800' : '500', fontSize: 12 }}>{t.label}</Text></Pressable>)}</View> : null}
   </>
 }
 function BadgeRole({ role }: { role: string }) { return <Text style={[s.text, { color: colors.green }]}>{readable(role)}</Text> }
 
-function RetainedWorkspace({ tabs, current, create, onCreate, onDone, onPassword, onTab, assignmentTarget, onAssignmentOpened }: { tabs: { key: string; label: string }[]; current: string; create: boolean; onCreate: () => void; onDone: () => void; onPassword: () => void; onTab: (tab: string) => void; assignmentTarget: AssignmentTarget | null; onAssignmentOpened: () => void }) {
+function RetainedWorkspace({ tabs, current, create, focusToday, onCreate, onDone, onPassword, onTab, onOpenToday, assignmentTarget, onAssignmentOpened }: { tabs: { key: string; label: string }[]; current: string; create: boolean; focusToday: boolean; onCreate: () => void; onDone: () => void; onPassword: () => void; onTab: (tab: string) => void; onOpenToday: () => void; assignmentTarget: AssignmentTarget | null; onAssignmentOpened: () => void }) {
   const [visited, setVisited] = useState([current])
   useEffect(() => { setVisited(previous => previous.includes(current) ? previous : [...previous, current]) }, [current])
   return <View style={s.flex}>
     {tabs.filter(t => visited.includes(t.key) || current === t.key).map(t => {
       const active = !create && current === t.key
       return <View key={t.key} style={active ? s.flex : { display: 'none' }} accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}>
-        {t.key === 'patients' ? <DoctorReferrals active={active} onCreate={onCreate} /> : t.key === 'home' ? <CollectionAgentHome active={active} onOpenCollections={() => onTab('orders')} onOpenRequests={() => onTab('requests')} /> : t.key === 'orders' ? <Collections active={active} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'requests' ? <AssignmentRequests active={active} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'reports' ? <CollectionReports active={active} /> : t.key === 'overview' ? <Collections active={active} overview /> : t.key === 'referrals' ? <AgentReferrals active={active} /> : <Account onPassword={onPassword} noAccess={tabs.length === 1} />}
+        {t.key === 'patients' ? <DoctorReferrals active={active} onCreate={onCreate} /> : t.key === 'home' ? <CollectionAgentHome active={active} onOpenCollections={onOpenToday} onOpenAllCollections={() => onTab('orders')} onOpenRequests={() => onTab('requests')} /> : t.key === 'orders' ? <Collections active={active} focusToday={focusToday} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'requests' ? <AssignmentRequests active={active} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'reports' ? <CollectionReports active={active} /> : t.key === 'overview' ? <Collections active={active} overview /> : t.key === 'referrals' ? <AgentReferrals active={active} /> : <Account onPassword={onPassword} noAccess={tabs.length === 1} />}
       </View>
     })}
     {create ? <NewReferral onDone={onDone} /> : null}

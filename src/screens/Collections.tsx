@@ -13,6 +13,7 @@ import { collectionDateMatches, type CollectionDateFilter } from '../utils/colle
 import { CollectionTestsDetails } from '../components/CollectionTests'
 
 const statusOrder: Record<string, number> = { assigned: 0, accepted: 1, en_route: 2, arrived: 3, sample_collected: 4, handover_complete: 5, rejected: 6 }
+const statusAccent: Record<string, string> = { assigned: '#D97706', accepted: '#0284C7', en_route: '#EA580C', arrived: '#7C3AED', sample_collected: '#0F766E', handover_complete: '#15803D', rejected: '#B91C1C', cancelled: '#64748B' }
 function slotMinutes(slot?: string | null) {
   const match = (slot || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i)
   if (!match) return Number.MAX_SAFE_INTEGER
@@ -31,7 +32,7 @@ async function captureArrivalLocation(): Promise<{ latitude: number | null; long
   } catch { return { latitude: null, longitude: null } }
 }
 
-export function Collections({ overview = false, active = true, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
+export function Collections({ overview = false, active = true, focusToday = false, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; focusToday?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token, permissions } = useAuth(), resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments', active)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [open, setOpen] = useState(false), [page, setPage] = useState(1), [selected, setSelected] = useState<Assignment | null>(null)
   const [dateFilter, setDateFilter] = useState<CollectionDateFilter>('all'), [dateOpen, setDateOpen] = useState(false), [dateNow, setDateNow] = useState(new Date())
@@ -44,6 +45,7 @@ export function Collections({ overview = false, active = true, assignmentTarget,
     return () => { clearInterval(timer); listener.remove() }
   }, [active, overview])
   useEffect(() => { if (!active) setSelected(null) }, [active])
+  useEffect(() => { if (active && focusToday && !overview) { setDateFilter('today'); setStatus('all'); setPage(1) } }, [active, focusToday, overview])
   const [linkError, setLinkError] = useState(''), [linkBusy, setLinkBusy] = useState(false), [linkRetry, setLinkRetry] = useState(0)
   const consumed = useRef(onAssignmentOpened)
   consumed.current = onAssignmentOpened
@@ -79,18 +81,20 @@ export function Collections({ overview = false, active = true, assignmentTarget,
       <Picker label="Collection status" value={status} options={['all', 'assigned', 'accepted', 'rejected', 'en_route', 'arrived', 'sample_collected', 'handover_complete'].map(v => ({ value: v, label: v === 'all' ? 'All statuses' : readable(v) }))} open={open} onToggle={() => { setOpen(!open); setDateOpen(false) }} onChange={v => { setStatus(v); setPage(1); setOpen(false) }} />
       <Text style={s.muted}>{rows.length} {rows.length === 1 ? 'collection matches' : 'collections match'} your filters.</Text>
       {!resource.loading && !rows.length ? <Empty title="No matching collections" detail="Try All dates, another status or a different search. New assignments from your administrator will appear here." /> : null}
-      {rows.slice((current - 1) * 6, current * 6).map(a => <View key={a.id} style={s.card}><View style={s.between}><Text style={s.title}>{a.order.order_number}</Text><Badge label={readable(a.assignment_status)} /></View><Text style={s.text}>{a.order.collection_address?.full_name || 'Customer'}</Text><Text style={s.muted}>{dateText(a.order.collection_date)} · {a.order.collection_slot}</Text><Button label="View collection" secondary onPress={() => setSelected(a)} /></View>)}
+      {rows.slice((current - 1) * 6, current * 6).map(a => <View key={a.id} style={[s.card, { borderLeftWidth: 4, borderLeftColor: statusAccent[a.assignment_status] || colors.border }]}><View style={s.between}><Text style={s.title}>{a.order.order_number}</Text><Badge label={readable(a.assignment_status)} /></View><Text style={s.text}>{a.order.collection_address?.full_name || 'Customer'}</Text><Text style={s.muted}>{dateText(a.order.collection_date)} · {a.order.collection_slot}</Text><Button label="View collection" secondary onPress={() => setSelected(a)} /></View>)}
       <Pagination page={current} count={count} onChange={setPage} />
     </>}
   </Page>{active && selected ? <CollectionDetail key={selected.id} assignment={selected} writable={canWrite(permissions, 'orders')} onClose={() => setSelected(null)} onUpdated={a => { setSelected(a); resourceCache.invalidate('agent-assignments') }} /> : null}</>
 }
 
 /** A calm landing page for collection agents; operational details remain in Collections. */
-export function CollectionAgentHome({ active = true, onOpenCollections, onOpenRequests }: { active?: boolean; onOpenCollections: () => void; onOpenRequests: () => void }) {
+export function CollectionAgentHome({ active = true, onOpenCollections, onOpenAllCollections = onOpenCollections, onOpenRequests }: { active?: boolean; onOpenCollections: () => void; onOpenAllCollections?: () => void; onOpenRequests: () => void }) {
   const { token, user } = useAuth()
   const resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments-home', active)
   const rows = resource.data || []
-  const today = new Date().toISOString().slice(0, 10)
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const part = (type: string) => parts.find(item => item.type === type)?.value || ''
+  const today = `${part('year')}-${part('month')}-${part('day')}`
   const todayRows = rows.filter(row => row.order.collection_date === today)
   const pending = rows.filter(row => row.assignment_status === 'assigned').length
   const completed = todayRows.filter(row => row.assignment_status === 'handover_complete').length
@@ -110,7 +114,7 @@ export function CollectionAgentHome({ active = true, onOpenCollections, onOpenRe
     <View style={s.card}>
       <Text style={s.title}>Quick actions</Text>
       <Button label="Assignment requests" icon="inbox" secondary onPress={onOpenRequests} />
-      <Button label="All collections" icon="map-pin" secondary onPress={onOpenCollections} />
+      <Button label="All collections" icon="map-pin" secondary onPress={onOpenAllCollections} />
       <Text style={s.muted}>Customer contact and address details are available after you accept an assignment.</Text>
     </View>
   </Page>
@@ -120,7 +124,7 @@ export function CollectionReports({ active = true }: { active?: boolean }) {
   const { token } = useAuth()
   const resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments-reports', active)
   const [selectedMonth, setSelectedMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
-  const months = Array.from({ length: 3 }, (_, index) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - index); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; return { key, label: formatIndiaDateTime(`${key}-01 00:00:00`).split(',')[1]?.trim() || key } })
+  const months = Array.from({ length: 3 }, (_, index) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - index); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; const formatted = formatIndiaDateTime(`${key}-01 00:00:00`); return { key, label: formatted.split(',')[0]?.replace(/^\d{2}\s+/, '') || key } })
   const completed = (resource.data || []).filter(row => row.assignment_status === 'handover_complete' && row.order.collection_date?.startsWith(selectedMonth)).sort((a, b) => b.order.collection_date.localeCompare(a.order.collection_date))
   return <Page refreshing={resource.loading} onRefresh={resource.refresh}>
     <Text style={s.title}>Collection reports</Text>
@@ -139,7 +143,7 @@ export function AssignmentRequests({ active = true, assignmentTarget, onAssignme
   useEffect(() => { if (active && assignmentTarget?.eventType === 'booking_assignment_request') { void load(); onAssignmentOpened?.() } }, [active, assignmentTarget, load, onAssignmentOpened])
   const accept = async (row: AssignmentRequest) => { setBusy(true); try { await api.acceptAssignmentRequest(token!, row.id); Alert.alert('Assignment accepted', 'Customer contact and address details are now available.'); await load(); resourceCache.invalidate('agent-assignments') } catch (e) { Alert.alert('Could not accept request', assignmentError(e)); await load() } finally { setBusy(false) } }
   const reject = (row: AssignmentRequest) => Alert.alert('Reject this request?', 'Customer contact and address details are hidden until acceptance.', [{ text: 'Keep', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: async () => { setBusy(true); try { await api.rejectAssignmentRequest(token!, row.id); Alert.alert('Request rejected', 'The assignment request was rejected.'); await load() } catch (e) { Alert.alert('Could not reject request', assignmentError(e)); await load() } finally { setBusy(false) } } }])
-  return <Page refreshing={busy} onRefresh={load}><Text style={s.title}>Assignment requests</Text><Text style={s.muted}>Review nearby collection requests. Customer contact and address details are available only after you accept.</Text><ErrorNotice error={error} />{busy && !rows.length ? <Loading label="Loading requests…" /> : null}{!busy && !rows.length ? <Empty title="No assignment requests" detail="New requests matching your serviceable area will appear here." /> : null}{rows.map(row => <View key={row.id} style={[s.card, { gap: 8 }]}><View style={s.between}><Text style={s.title}>Order #{row.order_id}</Text><Badge label={readable(row.status)} /></View><Text style={s.muted}>Request expires {formatIndiaDateTime(row.expires_at)}</Text>{row.status === 'pending' ? <View style={s.between}><Button label="Accept request" disabled={busy} onPress={() => void accept(row)} /><Button label="Reject" secondary disabled={busy} onPress={() => reject(row)} /></View> : null}</View>)}</Page>
+  return <Page refreshing={busy} onRefresh={load}><Text style={s.title}>Assignment requests</Text><Text style={s.muted}>Review nearby collection requests. Customer contact and address details are available only after you accept.</Text><ErrorNotice error={error} />{busy && !rows.length ? <Loading label="Loading requests…" /> : null}{!busy && !rows.length ? <Empty title="No assignment requests" detail="New requests matching your serviceable area will appear here." /> : null}{rows.map(row => <View key={row.id} style={[s.card, { gap: 8 }]}><View style={s.between}><Text style={s.title}>{row.order_number?.trim() || `Order #${row.order_id}`}</Text><Badge label={readable(row.status)} /></View><Text style={s.muted}>Request expires {formatIndiaDateTime(row.expires_at)}</Text>{row.status === 'pending' ? <View style={s.between}><Button label="Accept request" disabled={busy} onPress={() => void accept(row)} /><Button label="Reject" secondary disabled={busy} onPress={() => reject(row)} /></View> : null}</View>)}</Page>
 }
 function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assignment: Assignment; writable: boolean; onClose: () => void; onUpdated: (a: Assignment) => void }) {
   const { token } = useAuth(), events = useResource(useCallback(() => api.timeline(token!, assignment.order.id), [token, assignment.order.id]), `timeline-${assignment.order.id}`)
