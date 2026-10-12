@@ -111,7 +111,7 @@ export function CollectionAgentHome({ active = true, onOpenCollections, onOpenAl
     </Pressable>
     <View style={{ flexDirection: 'row', gap: 10 }}>
       <Pressable accessibilityRole="button" onPress={onOpenRequests} style={[s.card, { flex: 1, alignItems: 'center' }]}><Text style={[s.title, { color: colors.green }]}>{pending}</Text><Text style={s.muted}>Pending requests</Text></Pressable>
-      <Pressable accessibilityRole="button" onPress={onOpenCollections} style={[s.card, { flex: 1, alignItems: 'center' }]}><Text style={[s.title, { color: colors.green }]}>{rows.length}</Text><Text style={s.muted}>All collections</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={onOpenAllCollections} style={[s.card, { flex: 1, alignItems: 'center' }]}><Text style={[s.title, { color: colors.green }]}>{rows.length}</Text><Text style={s.muted}>All collections</Text></Pressable>
     </View>
     <View style={s.card}>
       <Text style={s.title}>Quick actions</Text>
