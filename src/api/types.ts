@@ -21,4 +21,5 @@ export type AssignmentRequest = {
   package_name?: string | null; fasting_required?: boolean | null; notes?: string | null
 }
 export type Tracking = { id: number; title: string; status: string; description?: string | null; actor_name?: string | null; created_at: string }
-export type ReferralDashboard = { total_referrals: number; qualified_referrals: number; pending_referrals: number; issued_rewards: number; recent_referrals: { id: number; referred_order_id: number | null; reward_coupon_code: string | null; status: string }[] }
+export type ReferralDashboard = { total_referrals: number; qualified_referrals: number; pending_referrals: number; issued_rewards: number; recent_referrals: { id: number; referred_order_id: number | null; order_number?: string | null; reward_coupon_code: string | null; status: string }[] }
+export type CollectionAgentReview = { id?: number | null; rating: number; review_text?: string | null; released_at?: string | null; received_at?: string | null; created_at?: string | null }

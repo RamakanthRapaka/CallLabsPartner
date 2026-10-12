@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { AppState, Linking, Text, View } from 'react-native'
+import { AppState, Linking, Pressable, Text, View } from 'react-native'
 import Constants from 'expo-constants'
 import { api } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button, Loading, s, Sheet } from '../components/ui'
 import { resourceCache } from '../cache/resources'
 import { canRead, readable, dateText } from '../utils/domain'
-import { parsePushTarget, type PushTarget, type AssignmentTarget } from './lifecycle'
+import { parsePushTarget, type PushTarget, type AssignmentTarget, type ReviewTarget } from './lifecycle'
 import { pushSession } from './session'
 
-export function PartnerNotifications({ showStatus, onAssignment }: { showStatus: boolean; onAssignment: (target: AssignmentTarget) => void }) {
+export function PartnerNotifications({ showStatus, onAssignment, onReview }: { showStatus: boolean; onAssignment: (target: AssignmentTarget) => void; onReview: (target: ReviewTarget) => void }) {
   const auth = useAuth(), [status, setStatus] = useState('Preparing notifications…'), [retry, setRetry] = useState(0)
   const [detail, setDetail] = useState<{ loading: boolean; text: string } | null>(null)
+  const [banner, setBanner] = useState(false)
   const seen = useRef(''), opening = useRef(0)
   const navigate = useRef(onAssignment)
   navigate.current = onAssignment
@@ -32,6 +33,10 @@ export function PartnerNotifications({ showStatus, onAssignment }: { showStatus:
       try {
         const profile = await api.profile(token)
         if (profile.id !== user.id || !profile.is_active || profile.approval_status !== 'approved' || profile.role !== user.role) throw new Error('Your account no longer has access to this notification.')
+        if (target.kind === 'review') {
+          if (alive && serial === opening.current) { setDetail(null); onReview(target) }
+          return
+        }
         if (target.kind === 'assignment') {
           if (!canRead(await api.permissions(token), 'orders') || !canRead(auth.permissions, 'orders')) throw new Error('Collection access is unavailable. Refresh your account access or contact your administrator.')
           if (alive && serial === opening.current) { setDetail(null); navigate.current(target) }
@@ -84,8 +89,9 @@ export function PartnerNotifications({ showStatus, onAssignment }: { showStatus:
           return
         }
         subscription = notifications.addNotificationResponseReceivedListener(response)
-        received = notifications.addNotificationReceivedListener(() => {
+        received = notifications.addNotificationReceivedListener(notification => {
           if (!alive) return
+          if (parsePushTarget(notification.request.content.data, user.role)?.kind === 'review') setBanner(true)
           resourceCache.invalidate('agent-assignments'); resourceCache.invalidate('doctor-referrals'); resourceCache.invalidate('agent-referrals')
         })
         nativeToken = notifications.addPushTokenListener(() => void register())
@@ -98,6 +104,7 @@ export function PartnerNotifications({ showStatus, onAssignment }: { showStatus:
     return () => { alive = false; ++opening.current; subscription?.remove(); received?.remove(); nativeToken?.remove(); foreground.remove(); notifications?.setNotificationHandler(null) }
   }, [auth.token, auth.user?.id, auth.user?.role, auth.user?.approval_status, accessSignature, retry])
   return <>
+    {banner ? <Pressable onPress={() => { setBanner(false); onReview({ kind: 'review', id: 0 }) }} style={{ margin: 12, padding: 13, borderRadius: 12, backgroundColor: '#E9F8EF', borderWidth: 1, borderColor: '#B9E7C9' }}><Text style={[s.text, { color: '#008744', fontWeight: '800' }]}>New customer feedback</Text><Text style={s.muted}>You have received new customer feedback. Tap to view anonymized reviews.</Text></Pressable> : null}
     {showStatus ? <View style={{ padding: 12 }}><Text style={s.text}>{status}</Text><Button label="Retry notifications" secondary onPress={() => setRetry(v => v + 1)} /><Button label="Phone notification settings" secondary onPress={() => void Linking.openSettings().catch(() => {})} /></View> : null}
     {detail ? <Sheet visible title="Notification details" onClose={() => { ++opening.current; setDetail(null) }}>{detail.loading ? <Loading /> : <Text style={s.text}>{detail.text}</Text>}</Sheet> : null}
   </>

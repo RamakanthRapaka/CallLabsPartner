@@ -35,7 +35,8 @@ export class PushLifecycle {
   }
 }
 export type AssignmentTarget = { kind: 'assignment'; id: number; orderId: number; eventType: 'booking_assigned' | 'booking_reassigned' | 'booking_assignment_request' }
-export type PushTarget = { kind: 'booking' | 'referral'; id: number } | AssignmentTarget
+export type ReviewTarget = { kind: 'review'; id: number }
+export type PushTarget = { kind: 'booking' | 'referral'; id: number } | AssignmentTarget | ReviewTarget
 export function parsePushTarget(data: unknown, role: string): PushTarget | null {
   if (!data || typeof data !== 'object') return null
   const value = data as Record<string, unknown>
@@ -44,5 +45,6 @@ export function parsePushTarget(data: unknown, role: string): PushTarget | null 
   if (role === 'collection_agent' && (value.event_type === 'booking_assigned' || value.event_type === 'booking_reassigned') && positive(value.assignment_id) && positive(value.order_id)) return { kind: 'assignment', id: value.assignment_id, orderId: value.order_id, eventType: value.event_type }
   if (role === 'collection_agent' && value.event_type === 'booking_assignment_request' && positive(value.request_id) && positive(value.order_id)) return { kind: 'assignment', id: value.request_id, orderId: value.order_id, eventType: value.event_type }
   if (role === 'collection_agent' && ['booking_cancelled', 'booking_rescheduled'].includes(String(value.event_type)) && positive(value.order_id)) return { kind: 'booking', id: value.order_id }
+  if (role === 'collection_agent' && value.type === 'collection_agent_review' && positive(value.review_id)) return { kind: 'review', id: value.review_id }
   return null
 }

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { resourceCache } from '../cache/resources'
 import { Alert, AppState, Linking, Pressable, Text, View } from 'react-native'
 import { api } from '../api/client'
-import type { Assignment, AssignmentRequest } from '../api/types'
+import type { Assignment, AssignmentRequest, CollectionAgentReview } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { Badge, Button, colors, Empty, ErrorNotice, Field, Loading, Page, Pagination, Picker, s, Sheet } from '../components/ui'
 import { useResource } from '../hooks/useResource'
@@ -133,6 +133,32 @@ export function CollectionReports({ active = true }: { active?: boolean }) {
     <View style={[s.card, { backgroundColor: '#e9f8ef', borderColor: '#b9e7c9' }]}><Text style={s.muted}>COMPLETED IN {months.find(month => month.key === selectedMonth)?.label.toUpperCase()}</Text><Text style={[s.title, { fontSize: 30, color: colors.green }]}>{completed.length}</Text><Text style={s.muted}>completed bookings</Text></View>
     {!resource.loading && !completed.length ? <Empty title="No completed collections" detail="Completed collections for this month will appear here." /> : null}
     {completed.map(row => <View key={row.id} style={[s.card, s.between]}><View><Text style={s.title}>{row.order.order_number}</Text><Text style={s.muted}>{dateText(row.order.collection_date)}</Text></View><Badge label="Completed" /></View>)}
+  </Page>
+}
+export function CollectionAgentReviews({ active = true, reviewTarget }: { active?: boolean; reviewTarget?: { kind: 'review'; id: number } | null }) {
+  const { token } = useAuth()
+  const resource = useResource(useCallback(() => api.collectionAgentReviews(token!), [token]), 'agent-reviews', active)
+  const formatReviewDate = (value?: string | null) => {
+    if (!value) return '-'
+    const raw = String(value).trim()
+    const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : `${raw.replace(' ', 'T')}Z`
+    const date = new Date(normalized)
+    if (Number.isNaN(date.getTime())) return '-'
+    return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(date)
+  }
+  const reviews = (resource.data || []) as CollectionAgentReview[]
+  return <Page refreshing={resource.loading} onRefresh={resource.refresh}>
+    <Text style={s.title}>Customer feedback</Text>
+    <Text style={s.muted}>Customer feedback is anonymized and released after the review period.</Text>
+    <ErrorNotice error={resource.error} />
+    {resource.error ? <Button label="Retry" secondary onPress={() => void resource.refresh()} /> : null}
+    {resource.loading && !resource.data ? <Loading label="Loading feedback…" /> : null}
+    {!resource.loading && !reviews.length ? <Empty title="No customer feedback yet" detail="Released feedback will appear here after the review period." /> : null}
+    {reviews.map((review, index) => <View key={review.id ?? `${review.created_at || 'review'}-${index}`} style={s.card}>
+      <View style={s.between}><Text style={s.title}>Anonymous customer feedback</Text><Text accessibilityLabel={`${review.rating} out of 5 stars`} style={{ color: '#E09A16', fontSize: 20, letterSpacing: 2 }}>{'★'.repeat(Math.max(0, Math.min(5, review.rating)))}{'☆'.repeat(Math.max(0, 5 - Math.min(5, review.rating)))}</Text></View>
+      {review.review_text ? <Text style={s.text}>{review.review_text}</Text> : <Text style={s.muted}>No written comment provided.</Text>}
+      <Text style={s.muted}>Received {formatReviewDate(review.released_at || review.received_at || review.created_at)}</Text>
+    </View>)}
   </Page>
 }
 export function AssignmentRequests({ active = true, assignmentTarget, onAssignmentOpened }: { active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
@@ -276,6 +302,6 @@ function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assign
 export function AgentReferrals({ active = true }: { active?: boolean }) {
   const { token } = useAuth(), resource = useResource(useCallback(() => api.operationalReferrals(token!), [token]), 'agent-referrals', active)
   return <Page refreshing={resource.loading} onRefresh={resource.refresh}><Text style={s.muted}>Referral qualification for your assigned booking queue, not the doctor’s patient referral list.</Text><ErrorNotice error={resource.error} />{resource.error ? <Button label="Retry" onPress={() => void resource.refresh()} /> : null}{resource.loading && !resource.data ? <Loading /> : null}
-    {resource.data ? <><View style={s.card}><Text style={s.text}>Total: {resource.data.total_referrals}</Text><Text style={s.text}>Qualified: {resource.data.qualified_referrals}</Text><Text style={s.text}>Pending: {resource.data.pending_referrals}</Text><Text style={s.text}>Rewards issued: {resource.data.issued_rewards}</Text></View>{resource.data.recent_referrals.map(r => <View key={r.id} style={s.card}><Text style={s.title}>Referral #{r.id}</Text><Badge label={readable(r.status)} /><Text style={s.text}>Booking ID: {r.referred_order_id ?? 'Not booked yet'}</Text>{r.reward_coupon_code ? <Text style={s.text}>Reward: {r.reward_coupon_code}</Text> : null}</View>)}{!resource.data.recent_referrals.length ? <Empty title="No recent referral activity" detail="Assigned booking referral activity will appear here." /> : null}</> : null}
+    {resource.data ? <><View style={s.card}><Text style={s.text}>Total: {resource.data.total_referrals}</Text><Text style={s.text}>Qualified: {resource.data.qualified_referrals}</Text><Text style={s.text}>Pending: {resource.data.pending_referrals}</Text><Text style={s.text}>Rewards issued: {resource.data.issued_rewards}</Text></View>{resource.data.recent_referrals.map(r => <View key={r.id} style={s.card}><Text style={s.title}>Referral #{r.id}</Text><Badge label={readable(r.status)} />{r.order_number ? <Text style={s.text}>Booking: {r.order_number}</Text> : r.referred_order_id != null ? <Text style={s.text}>Booking ID: {r.referred_order_id}</Text> : <Text style={s.text}>Booking: Not booked yet</Text>}{r.reward_coupon_code ? <Text style={s.text}>Reward: {r.reward_coupon_code}</Text> : null}</View>)}{!resource.data.recent_referrals.length ? <Empty title="No recent referral activity" detail="Assigned booking referral activity will appear here." /> : null}</> : null}
   </Page>
 }
