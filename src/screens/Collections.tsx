@@ -91,14 +91,15 @@ export function Collections({ overview = false, active = true, focusToday = fals
 export function CollectionAgentHome({ active = true, onOpenCollections, onOpenAllCollections = onOpenCollections, onOpenRequests }: { active?: boolean; onOpenCollections: () => void; onOpenAllCollections?: () => void; onOpenRequests: () => void }) {
   const { token, user } = useAuth()
   const resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments-home', active)
+  const requestResource = useResource(useCallback(() => api.assignmentRequests(token!), [token]), 'agent-assignment-requests-home', active)
   const rows = resource.data || []
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
   const part = (type: string) => parts.find(item => item.type === type)?.value || ''
   const today = `${part('year')}-${part('month')}-${part('day')}`
   const todayRows = rows.filter(row => row.order.collection_date === today)
-  const pending = rows.filter(row => row.assignment_status === 'assigned').length
+  const pending = (requestResource.data || []).filter(row => row.status === 'pending').length
   const completed = todayRows.filter(row => row.assignment_status === 'handover_complete').length
-  return <Page refreshing={resource.loading} onRefresh={resource.refresh}>
+  return <Page refreshing={resource.loading || requestResource.loading} onRefresh={() => { void Promise.all([resource.refresh(), requestResource.refresh()]) }}>
     <Text style={s.title}>Hello {user?.full_name?.split(' ')[0] || 'there'}</Text>
     <Text style={s.muted}>Here is your collection overview.</Text>
     <Pressable accessibilityRole="button" onPress={onOpenCollections} style={[s.card, { backgroundColor: '#e9f8ef', borderColor: '#b9e7c9' }]}>
