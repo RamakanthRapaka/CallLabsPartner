@@ -32,7 +32,7 @@ async function captureArrivalLocation(): Promise<{ latitude: number | null; long
   } catch { return { latitude: null, longitude: null } }
 }
 
-export function Collections({ overview = false, active = true, focusToday = false, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; focusToday?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
+export function Collections({ overview = false, active = true, focusToday = false, resetToAll = 0, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; focusToday?: boolean; resetToAll?: number; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token, permissions } = useAuth(), resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments', active)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [open, setOpen] = useState(false), [page, setPage] = useState(1), [selected, setSelected] = useState<Assignment | null>(null)
   const [dateFilter, setDateFilter] = useState<CollectionDateFilter>('all'), [dateOpen, setDateOpen] = useState(false), [dateNow, setDateNow] = useState(new Date())
@@ -46,6 +46,7 @@ export function Collections({ overview = false, active = true, focusToday = fals
   }, [active, overview])
   useEffect(() => { if (!active) setSelected(null) }, [active])
   useEffect(() => { if (active && focusToday && !overview) { setDateFilter('today'); setStatus('all'); setPage(1) } }, [active, focusToday, overview])
+  useEffect(() => { if (active && resetToAll && !overview) { setDateFilter('all'); setStatus('all'); setPage(1) } }, [active, resetToAll, overview])
   const [linkError, setLinkError] = useState(''), [linkBusy, setLinkBusy] = useState(false), [linkRetry, setLinkRetry] = useState(0)
   const consumed = useRef(onAssignmentOpened)
   consumed.current = onAssignmentOpened
