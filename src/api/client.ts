@@ -1,4 +1,5 @@
 import type { Assignment, AssignmentRequest, AssignmentStatus, Catalog, CollectionAgentReview, Permission, Referral, ReferralCreate, ReferralDashboard, Session, Tracking, User } from './types'
+import type { AssignmentRequestFilters } from './types'
 
 export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://api.calllabs.in/api/v1').replace(/\/+$/, '')
 export class ApiError extends Error {
@@ -57,7 +58,12 @@ export const api = {
       if (page.length < 100) return all
     }
   },
-  assignmentRequests: (token: string) => request<AssignmentRequest[]>('/admin/collection-agent/assignment-requests', token),
+  assignmentRequests: (token: string, filters: AssignmentRequestFilters = {}) => {
+    const params = new URLSearchParams()
+    Object.entries(filters).forEach(([key, value]) => { if (value) params.set(key, value) })
+    const query = params.toString()
+    return request<AssignmentRequest[]>(`/admin/collection-agent/assignment-requests${query ? `?${query}` : ''}`, token)
+  },
   collectionAgentReviews: (token: string) => request<CollectionAgentReview[]>('/collection-agent/reviews', token),
   acceptAssignmentRequest: (token: string, id: number) => request<Assignment>(`/admin/collection-agent/assignment-requests/${id}/accept`, token, json('POST', {})),
   rejectAssignmentRequest: (token: string, id: number) => request<AssignmentRequest>(`/admin/collection-agent/assignment-requests/${id}/reject`, token, json('POST', {})),

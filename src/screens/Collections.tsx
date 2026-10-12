@@ -32,10 +32,12 @@ async function captureArrivalLocation(): Promise<{ latitude: number | null; long
   } catch { return { latitude: null, longitude: null } }
 }
 
-export function Collections({ overview = false, active = true, focusToday = false, resetToAll = 0, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; focusToday?: boolean; resetToAll?: number; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
+export function Collections({ overview = false, active = true, focusToday = false, todayRequest = 0, resetToAll = 0, assignmentTarget, onAssignmentOpened }: { overview?: boolean; active?: boolean; focusToday?: boolean; todayRequest?: number; resetToAll?: number; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token, permissions } = useAuth(), resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments', active)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('all'), [open, setOpen] = useState(false), [page, setPage] = useState(1), [selected, setSelected] = useState<Assignment | null>(null)
   const [dateFilter, setDateFilter] = useState<CollectionDateFilter>('all'), [dateOpen, setDateOpen] = useState(false), [dateNow, setDateNow] = useState(new Date())
+  const lastAllCollectionsRequest = useRef(0)
+  const lastTodayRequest = useRef(0)
   useEffect(() => {
     if (!active || overview) return
     const refreshDay = () => setDateNow(new Date())
@@ -46,7 +48,8 @@ export function Collections({ overview = false, active = true, focusToday = fals
   }, [active, overview])
   useEffect(() => { if (!active) setSelected(null) }, [active])
   useEffect(() => { if (active && focusToday && !overview) { setDateFilter('today'); setStatus('all'); setPage(1) } }, [active, focusToday, overview])
-  useEffect(() => { if (active && resetToAll && !overview) { setDateFilter('all'); setStatus('all'); setPage(1) } }, [active, resetToAll, overview])
+  useEffect(() => { if (active && resetToAll > lastAllCollectionsRequest.current && !overview) { lastAllCollectionsRequest.current = resetToAll; setDateFilter('all'); setStatus('all'); setPage(1) } }, [active, resetToAll, overview])
+  useEffect(() => { if (active && todayRequest > lastTodayRequest.current && !overview) { lastTodayRequest.current = todayRequest; setDateFilter('today'); setStatus('all'); setDateNow(new Date()); setPage(1) } }, [active, todayRequest, overview])
   const [linkError, setLinkError] = useState(''), [linkBusy, setLinkBusy] = useState(false), [linkRetry, setLinkRetry] = useState(0)
   const consumed = useRef(onAssignmentOpened)
   consumed.current = onAssignmentOpened
@@ -92,7 +95,7 @@ export function Collections({ overview = false, active = true, focusToday = fals
 export function CollectionAgentHome({ active = true, onOpenCollections, onOpenAllCollections = onOpenCollections, onOpenRequests }: { active?: boolean; onOpenCollections: () => void; onOpenAllCollections?: () => void; onOpenRequests: () => void }) {
   const { token, user } = useAuth()
   const resource = useResource(useCallback(() => api.assignments(token!), [token]), 'agent-assignments-home', active)
-  const requestResource = useResource(useCallback(() => api.assignmentRequests(token!), [token]), 'agent-assignment-requests-home', active)
+  const requestResource = useResource(useCallback(() => api.assignmentRequests(token!, { status: 'pending' }), [token]), 'agent-assignment-requests-home', active)
   const rows = resource.data || []
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
   const part = (type: string) => parts.find(item => item.type === type)?.value || ''
@@ -166,23 +169,26 @@ export function CollectionAgentReviews({ active = true, reviewTarget }: { active
 export function AssignmentRequests({ active = true, assignmentTarget, onAssignmentOpened }: { active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token } = useAuth()
   const [rows, setRows] = useState<AssignmentRequest[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState('')
-  const [tab, setTab] = useState<'pending' | 'accepted' | 'completed'>('pending')
-  const load = useCallback(async () => { if (!token) return; setBusy(true); setError(''); try { setRows(await api.assignmentRequests(token)) } catch (e) { setError(assignmentError(e)) } finally { setBusy(false) } }, [token])
+  const [tab, setTab] = useState<'pending' | 'accepted' | 'rejected' | 'expired'>('pending')
+  const [dateFrom, setDateFrom] = useState(''), [dateTo, setDateTo] = useState(''), [appliedDateFrom, setAppliedDateFrom] = useState(''), [appliedDateTo, setAppliedDateTo] = useState('')
+  const load = useCallback(async () => { if (!token) return; setBusy(true); setError(''); try { setRows(await api.assignmentRequests(token, { status: tab, date_from: appliedDateFrom || undefined, date_to: appliedDateTo || undefined })) } catch (e) { setError(assignmentError(e)) } finally { setBusy(false) } }, [token, tab, appliedDateFrom, appliedDateTo])
   useEffect(() => { if (active) void load() }, [active, load])
   useEffect(() => { if (active && assignmentTarget?.eventType === 'booking_assignment_request') { void load(); onAssignmentOpened?.() } }, [active, assignmentTarget, load, onAssignmentOpened])
   const accept = async (row: AssignmentRequest) => { setBusy(true); try { await api.acceptAssignmentRequest(token!, row.id); Alert.alert('Assignment accepted', 'Customer contact and address details are now available.'); await load(); resourceCache.invalidate('agent-assignments') } catch (e) { Alert.alert('Could not accept request', assignmentError(e)); await load() } finally { setBusy(false) } }
   const reject = (row: AssignmentRequest) => Alert.alert('Reject this request?', 'Customer contact and address details are hidden until acceptance.', [{ text: 'Keep', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: async () => { setBusy(true); try { await api.rejectAssignmentRequest(token!, row.id); Alert.alert('Request rejected', 'The assignment request was rejected.'); await load() } catch (e) { Alert.alert('Could not reject request', assignmentError(e)); await load() } finally { setBusy(false) } } }])
-  const visibleRows = rows.filter(row => tab === 'pending' ? row.status === 'pending' : tab === 'accepted' ? row.status === 'accepted' : row.status === 'expired' || row.status === 'rejected')
-  const tabLabel = (value: typeof tab) => value === 'pending' ? `New Requests${rows.filter(row => row.status === 'pending').length ? ` (${rows.filter(row => row.status === 'pending').length})` : ''}` : value === 'accepted' ? `Accepted (${rows.filter(row => row.status === 'accepted').length})` : `Completed (${rows.filter(row => row.status === 'expired' || row.status === 'rejected').length})`
+  const visibleRows = rows.filter(row => row.status === tab)
+  const tabLabel = (value: typeof tab) => value === 'pending' ? `New Requests (${rows.length})` : readable(value)
   return <Page refreshing={busy} onRefresh={load}>
     <Text style={s.title}>Assignment Requests</Text>
     <Text style={s.muted}>Review nearby collection requests. Customer contact and address details are available only after you accept.</Text>
+    <View style={{ flexDirection: 'row', gap: 8 }}><View style={{ flex: 1 }}><Field label="From date (YYYY-MM-DD)" value={dateFrom} onChangeText={setDateFrom} placeholder="2026-10-16" maxLength={10} /></View><View style={{ flex: 1 }}><Field label="To date (YYYY-MM-DD)" value={dateTo} onChangeText={setDateTo} placeholder="2026-10-20" maxLength={10} /></View></View>
+    <Button label="Apply date filter" secondary onPress={() => { const valid = (value: string) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value); if (!valid(dateFrom) || !valid(dateTo) || (dateFrom && dateTo && dateFrom > dateTo)) { Alert.alert('Invalid date filter', 'Use YYYY-MM-DD dates, and ensure the From date is not later than the To date.'); return } setAppliedDateFrom(dateFrom); setAppliedDateTo(dateTo) }} />
     <View style={{ flexDirection: 'row', backgroundColor: '#EEF1F3', borderRadius: 12, padding: 3, gap: 3 }}>
-      {(['pending', 'accepted', 'completed'] as const).map(value => <Pressable key={value} onPress={() => setTab(value)} style={{ flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: tab === value ? colors.green : 'transparent' }}><Text style={{ color: tab === value ? colors.white : colors.text, fontWeight: '700', fontSize: 12 }}>{tabLabel(value)}</Text></Pressable>)}
+      {(['pending', 'accepted', 'rejected', 'expired'] as const).map(value => <Pressable key={value} onPress={() => setTab(value)} style={{ flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: tab === value ? colors.green : 'transparent' }}><Text style={{ color: tab === value ? colors.white : colors.text, fontWeight: '700', fontSize: 11 }}>{tabLabel(value)}</Text></Pressable>)}
     </View>
     <ErrorNotice error={error} />
     {busy && !rows.length ? <Loading label="Loading requests…" /> : null}
-    {!busy && !visibleRows.length ? <Empty title={tab === 'pending' ? 'No new requests' : tab === 'accepted' ? 'No accepted requests' : 'No completed requests'} detail={tab === 'pending' ? 'New requests matching your serviceable area will appear here.' : 'Requests in this category will appear here.'} /> : null}
+    {!busy && !visibleRows.length ? <Empty title={tab === 'pending' ? 'No new requests' : `No ${tab} requests`} detail={tab === 'pending' ? 'New requests matching your serviceable area will appear here.' : `Requests with ${tab} status will appear here.`} /> : null}
     {visibleRows.map(row => <View key={row.id} style={[s.card, { padding: 0, overflow: 'hidden', borderColor: row.status === 'pending' ? '#F2D6D6' : colors.border }]}>
       <View style={{ padding: 16, backgroundColor: row.status === 'pending' ? '#FFF7F7' : colors.soft, gap: 8 }}>
         <View style={s.between}><Badge label={row.status === 'pending' ? 'New request' : readable(row.status)} /><Text style={s.muted}>Requested {formatIndiaDateTime(row.created_at)}</Text></View>
