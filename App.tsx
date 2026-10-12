@@ -14,10 +14,11 @@ import { canRead, readable } from './src/utils/domain'
 import { resourceCache } from './src/cache/resources'
 import { PartnerNotifications } from './src/push/Notifications'
 import type { AssignmentTarget } from './src/push/lifecycle'
+import { initCrashReporting } from './src/utils/crashReporting'
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
-export default function App() { return <SafeAreaProvider><AuthProvider><SafeAreaView style={[s.flex, { backgroundColor: colors.bg }]}><StatusBar style="dark" /><Workspace /></SafeAreaView></AuthProvider></SafeAreaProvider> }
+export default function App() { useEffect(() => { initCrashReporting() }, []); return <SafeAreaProvider><AuthProvider><SafeAreaView style={[s.flex, { backgroundColor: colors.bg }]}><StatusBar style="dark" /><Workspace /></SafeAreaView></AuthProvider></SafeAreaProvider> }
 function Workspace() {
   const auth = useAuth(), [tab, setTab] = useState(''), [create, setCreate] = useState(false), [focusToday, setFocusToday] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)

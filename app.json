@@ -31,6 +31,8 @@
       "expo-document-picker",
       "expo-splash-screen",
       "expo-location",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       ["expo-notifications", { "icon": "./assets/notification-icon.png", "color": "#008744", "defaultChannel": "partner-updates" }]
     ],
     "extra": {

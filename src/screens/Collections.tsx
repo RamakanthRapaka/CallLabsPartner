@@ -138,12 +138,40 @@ export function CollectionReports({ active = true }: { active?: boolean }) {
 export function AssignmentRequests({ active = true, assignmentTarget, onAssignmentOpened }: { active?: boolean; assignmentTarget?: AssignmentTarget | null; onAssignmentOpened?: () => void }) {
   const { token } = useAuth()
   const [rows, setRows] = useState<AssignmentRequest[]>([]), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [tab, setTab] = useState<'pending' | 'accepted' | 'completed'>('pending')
   const load = useCallback(async () => { if (!token) return; setBusy(true); setError(''); try { setRows(await api.assignmentRequests(token)) } catch (e) { setError(assignmentError(e)) } finally { setBusy(false) } }, [token])
   useEffect(() => { if (active) void load() }, [active, load])
   useEffect(() => { if (active && assignmentTarget?.eventType === 'booking_assignment_request') { void load(); onAssignmentOpened?.() } }, [active, assignmentTarget, load, onAssignmentOpened])
   const accept = async (row: AssignmentRequest) => { setBusy(true); try { await api.acceptAssignmentRequest(token!, row.id); Alert.alert('Assignment accepted', 'Customer contact and address details are now available.'); await load(); resourceCache.invalidate('agent-assignments') } catch (e) { Alert.alert('Could not accept request', assignmentError(e)); await load() } finally { setBusy(false) } }
   const reject = (row: AssignmentRequest) => Alert.alert('Reject this request?', 'Customer contact and address details are hidden until acceptance.', [{ text: 'Keep', style: 'cancel' }, { text: 'Reject', style: 'destructive', onPress: async () => { setBusy(true); try { await api.rejectAssignmentRequest(token!, row.id); Alert.alert('Request rejected', 'The assignment request was rejected.'); await load() } catch (e) { Alert.alert('Could not reject request', assignmentError(e)); await load() } finally { setBusy(false) } } }])
-  return <Page refreshing={busy} onRefresh={load}><Text style={s.title}>Assignment requests</Text><Text style={s.muted}>Review nearby collection requests. Customer contact and address details are available only after you accept.</Text><ErrorNotice error={error} />{busy && !rows.length ? <Loading label="Loading requests…" /> : null}{!busy && !rows.length ? <Empty title="No assignment requests" detail="New requests matching your serviceable area will appear here." /> : null}{rows.map(row => <View key={row.id} style={[s.card, { gap: 8 }]}><View style={s.between}><Text style={s.title}>{row.order_number?.trim() || `Order #${row.order_id}`}</Text><Badge label={readable(row.status)} /></View><Text style={s.muted}>Request expires {formatIndiaDateTime(row.expires_at)}</Text>{row.status === 'pending' ? <View style={s.between}><Button label="Accept request" disabled={busy} onPress={() => void accept(row)} /><Button label="Reject" secondary disabled={busy} onPress={() => reject(row)} /></View> : null}</View>)}</Page>
+  const visibleRows = rows.filter(row => tab === 'pending' ? row.status === 'pending' : tab === 'accepted' ? row.status === 'accepted' : row.status === 'expired' || row.status === 'rejected')
+  const tabLabel = (value: typeof tab) => value === 'pending' ? `New Requests${rows.filter(row => row.status === 'pending').length ? ` (${rows.filter(row => row.status === 'pending').length})` : ''}` : value === 'accepted' ? `Accepted (${rows.filter(row => row.status === 'accepted').length})` : `Completed (${rows.filter(row => row.status === 'expired' || row.status === 'rejected').length})`
+  return <Page refreshing={busy} onRefresh={load}>
+    <Text style={s.title}>Assignment Requests</Text>
+    <Text style={s.muted}>Review nearby collection requests. Customer contact and address details are available only after you accept.</Text>
+    <View style={{ flexDirection: 'row', backgroundColor: '#EEF1F3', borderRadius: 12, padding: 3, gap: 3 }}>
+      {(['pending', 'accepted', 'completed'] as const).map(value => <Pressable key={value} onPress={() => setTab(value)} style={{ flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: tab === value ? colors.green : 'transparent' }}><Text style={{ color: tab === value ? colors.white : colors.text, fontWeight: '700', fontSize: 12 }}>{tabLabel(value)}</Text></Pressable>)}
+    </View>
+    <ErrorNotice error={error} />
+    {busy && !rows.length ? <Loading label="Loading requests…" /> : null}
+    {!busy && !visibleRows.length ? <Empty title={tab === 'pending' ? 'No new requests' : tab === 'accepted' ? 'No accepted requests' : 'No completed requests'} detail={tab === 'pending' ? 'New requests matching your serviceable area will appear here.' : 'Requests in this category will appear here.'} /> : null}
+    {visibleRows.map(row => <View key={row.id} style={[s.card, { padding: 0, overflow: 'hidden', borderColor: row.status === 'pending' ? '#F2D6D6' : colors.border }]}>
+      <View style={{ padding: 16, backgroundColor: row.status === 'pending' ? '#FFF7F7' : colors.soft, gap: 8 }}>
+        <View style={s.between}><Badge label={row.status === 'pending' ? 'New request' : readable(row.status)} /><Text style={s.muted}>Requested {formatIndiaDateTime(row.created_at)}</Text></View>
+        <View style={s.between}><Text style={[s.title, { fontSize: 21 }]}>{row.order_number?.trim() || `Order #${row.order_id}`}</Text><Badge label={row.collection_date ? `Scheduled ${row.collection_date}` : 'Scheduled'} /></View>
+        <Text style={s.text}>◉  Customer details available after acceptance</Text>
+        {row.collection_slot ? <Text style={s.text}>◷  {row.collection_slot}</Text> : null}
+      </View>
+      <View style={{ padding: 16, gap: 8 }}>
+        {row.tests_count != null ? <Text style={s.text}>⚗  Tests: {row.tests_count}{row.fasting_required != null ? `  ·  ${row.fasting_required ? 'Fasting required' : 'No fasting required'}` : ''}</Text> : null}
+        {row.package_name ? <Text style={s.text}>▤  Package: {row.package_name}</Text> : null}
+        {row.notes ? <Text style={s.text}>☷  Notes: {row.notes}</Text> : null}
+        <Text style={s.muted}>Request expires {formatIndiaDateTime(row.expires_at)}</Text>
+        <Text style={s.muted}>Address and map details are available after acceptance.</Text>
+        {row.status === 'pending' ? <View style={{ flexDirection: 'row', gap: 10 }}><View style={{ flex: 1 }}><Button label="Decline" secondary disabled={busy} onPress={() => reject(row)} /></View><View style={{ flex: 1 }}><Button label="Accept assignment" disabled={busy} onPress={() => void accept(row)} /></View></View> : null}
+      </View>
+    </View>)}
+  </Page>
 }
 function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assignment: Assignment; writable: boolean; onClose: () => void; onUpdated: (a: Assignment) => void }) {
   const { token } = useAuth(), events = useResource(useCallback(() => api.timeline(token!, assignment.order.id), [token, assignment.order.id]), `timeline-${assignment.order.id}`)
