@@ -22,6 +22,8 @@ export const dateText = (value?: string | null) => {
   return formatted === '-' ? 'Not scheduled' : formatted.split(',')[0]
 }
 export const addressText = (address: Address | null) => address ? [address.address_line_1, address.address_line_2, address.city, address.state, address.postal_code].filter(Boolean).join(', ') : 'Collection address unavailable'
+const serviceAreas: Record<string, string> = { '500039': 'Uppal / Peerzadiguda', '500058': 'Kanchanbagh / Badangpet', '500069': 'R.C. Imarat / Bandlaguda', '500070': 'Vanasthalipuram / Hayathnagar', '500076': 'Nacharam / Mallapur / Snehapuri Colony', '500079': 'Vaishalinagar / Hasthinapuram', '500035': 'Kothapet / Saroornagar', '500036': 'Malakpet', '500060': 'Chaitanyapuri / P&T Colony', '500068': 'Mansoorabad and G.S.I. (S.R.) Bandlaguda', '500102': 'Rama Krishnapuram', '500059': 'Saidabad', '500074': 'L B Nagar' }
+export const serviceAreaText = (area?: string | null, postalCode?: string | null) => area?.trim() || (postalCode ? serviceAreas[postalCode.trim()] || `Service area (${postalCode.trim()})` : 'Service area unavailable')
 export const nextStep = (assignment: Assignment): { status: AssignmentStatus; label: string } | null => {
   if (['cancelled', 'completed'].includes(assignment.order.status)) return null
   const steps: Partial<Record<AssignmentStatus, { status: AssignmentStatus; label: string }>> = { accepted: { status: 'en_route', label: 'Start journey' }, en_route: { status: 'arrived', label: 'Mark as arrived' }, arrived: { status: 'sample_collected', label: 'Confirm sample collected' }, sample_collected: { status: 'handover_complete', label: 'Confirm lab handover' } }

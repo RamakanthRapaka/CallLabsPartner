@@ -19,6 +19,7 @@ export type AssignmentRequest = {
   status: 'pending' | 'accepted' | 'rejected' | 'expired'; expires_at: string; created_at: string
   collection_date?: string | null; collection_slot?: string | null; tests_count?: number | null
   package_name?: string | null; fasting_required?: boolean | null; notes?: string | null
+  area_name?: string | null; service_area?: string | null; postal_code?: string | null
 }
 export type Tracking = { id: number; title: string; status: string; description?: string | null; actor_name?: string | null; created_at: string }
 export type ReferralDashboard = { total_referrals: number; qualified_referrals: number; pending_referrals: number; issued_rewards: number; recent_referrals: { id: number; referred_order_id: number | null; order_number?: string | null; reward_coupon_code: string | null; status: string }[] }

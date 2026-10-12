@@ -6,7 +6,7 @@ import type { Assignment, AssignmentRequest, CollectionAgentReview } from '../ap
 import { useAuth } from '../auth/AuthContext'
 import { Badge, Button, colors, Empty, ErrorNotice, Field, Loading, Page, Pagination, Picker, s, Sheet } from '../components/ui'
 import { useResource } from '../hooks/useResource'
-import { addressText, canWrite, dateText, formatIndiaDateTime, nextStep, readable, timestamp } from '../utils/domain'
+import { addressText, canWrite, dateText, formatIndiaDateTime, nextStep, readable, serviceAreaText, timestamp } from '../utils/domain'
 import type { AssignmentTarget } from '../push/lifecycle'
 import { assignmentError, canRespond, decideAssignment } from '../utils/assignmentActions'
 import { collectionDateMatches, type CollectionDateFilter } from '../utils/collectionDates'
@@ -186,14 +186,18 @@ export function AssignmentRequests({ active = true, assignmentTarget, onAssignme
         <View style={s.between}><Badge label={row.status === 'pending' ? 'New request' : readable(row.status)} /><Text style={s.muted}>Requested {formatIndiaDateTime(row.created_at)}</Text></View>
         <View style={s.between}><Text style={[s.title, { fontSize: 21 }]}>{row.order_number?.trim() || `Order #${row.order_id}`}</Text><Badge label={row.collection_date ? `Scheduled ${row.collection_date}` : 'Scheduled'} /></View>
         <Text style={s.text}>◉  Customer details available after acceptance</Text>
-        {row.collection_slot ? <Text style={s.text}>◷  {row.collection_slot}</Text> : null}
+        <View style={{ flexDirection: 'row', gap: 14, flexWrap: 'wrap' }}>
+          {row.collection_date ? <Text style={s.text}>▣  {dateText(row.collection_date)}</Text> : null}
+          {row.collection_slot ? <Text style={s.text}>◷  {row.collection_slot}</Text> : null}
+        </View>
       </View>
       <View style={{ padding: 16, gap: 8 }}>
         {row.tests_count != null ? <Text style={s.text}>⚗  Tests: {row.tests_count}{row.fasting_required != null ? `  ·  ${row.fasting_required ? 'Fasting required' : 'No fasting required'}` : ''}</Text> : null}
         {row.package_name ? <Text style={s.text}>▤  Package: {row.package_name}</Text> : null}
         {row.notes ? <Text style={s.text}>☷  Notes: {row.notes}</Text> : null}
         <Text style={s.muted}>Request expires {formatIndiaDateTime(row.expires_at)}</Text>
-        <Text style={s.muted}>Address and map details are available after acceptance.</Text>
+        <Text style={s.text}>⌖  {serviceAreaText(row.area_name || row.service_area, row.postal_code)}</Text>
+        <Text style={s.muted}>Exact address and directions are available after acceptance.</Text>
         {row.status === 'pending' ? <View style={{ flexDirection: 'row', gap: 10 }}><View style={{ flex: 1 }}><Button label="Decline" secondary disabled={busy} onPress={() => reject(row)} /></View><View style={{ flex: 1 }}><Button label="Accept assignment" disabled={busy} onPress={() => void accept(row)} /></View></View> : null}
       </View>
     </View>)}

@@ -5,6 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { AuthProvider, useAuth } from './src/auth/AuthContext'
+import { api } from './src/api/client'
 import { Button, colors, ErrorNotice, Header, Loading, Page, s, Sheet } from './src/components/ui'
 import { PasswordForm } from './src/screens/Passwords'
 import { Login } from './src/screens/Login'
@@ -15,6 +16,7 @@ import { resourceCache } from './src/cache/resources'
 import { PartnerNotifications } from './src/push/Notifications'
 import type { AssignmentTarget, ReviewTarget } from './src/push/lifecycle'
 import { initCrashReporting } from './src/utils/crashReporting'
+import { useResource } from './src/hooks/useResource'
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined)
 
@@ -38,31 +40,34 @@ function Workspace() {
     <PartnerNotifications showStatus={current === 'account' && !create} onAssignment={target => { setCreate(false); setChangingPassword(false); setTab(target.eventType === 'booking_assignment_request' ? 'requests' : 'orders'); setAssignmentTarget(target) }} onReview={target => { setCreate(false); setChangingPassword(false); setReviewTarget(target); setTab('reviews') }} />
     <Header title={create ? 'New referral' : current === 'patients' ? 'Patient referrals' : tabs.find(t => t.key === current)!.label} onBack={create ? leaveCreate : undefined} />
     {auth.error ? <View style={{ padding: 12 }}><ErrorNotice error={auth.error} /><Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
-    <RetainedWorkspace key={`${auth.user.id}-${resourceCache.epoch}`} tabs={tabs} current={current} create={doctor && create} focusToday={focusToday} onCreate={() => setCreate(true)} onDone={() => { setCreate(false); setTab('patients') }} onPassword={() => setChangingPassword(true)} onTab={tabKey => { setFocusToday(false); setTab(tabKey) }} onOpenToday={() => { setFocusToday(true); setTab('orders') }} assignmentTarget={assignmentTarget} onAssignmentOpened={() => setAssignmentTarget(null)} reviewTarget={reviewTarget} />
+    <RetainedWorkspace key={`${auth.user.id}-${resourceCache.epoch}`} tabs={tabs} current={current} create={doctor && create} focusToday={focusToday} onCreate={() => setCreate(true)} onDone={() => { setCreate(false); setTab('patients') }} onPassword={() => setChangingPassword(true)} onReviews={() => { setReviewTarget(null); setTab('reviews') }} onTab={tabKey => { setFocusToday(false); setTab(tabKey) }} onOpenToday={() => { setFocusToday(true); setTab('orders') }} assignmentTarget={assignmentTarget} onAssignmentOpened={() => setAssignmentTarget(null)} reviewTarget={reviewTarget} />
     {changingPassword ? <Sheet visible title="Account security" onClose={() => setChangingPassword(false)}><PasswordForm mode="change" onDone={() => setChangingPassword(false)} onCancel={() => setChangingPassword(false)} /></Sheet> : null}
-    {!create ? <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderColor: colors.border }}>{tabs.map(t => <Pressable key={t.key} accessibilityRole="tab" accessibilityState={{ selected: current === t.key }} onPress={() => setTab(t.key)} style={{ flex: 1, minHeight: 60, justifyContent: 'center', alignItems: 'center', padding: 4, gap: 4 }}><Feather name={t.key === 'account' ? 'user' : t.key === 'home' ? 'home' : t.key === 'orders' ? 'map-pin' : t.key === 'requests' ? 'inbox' : t.key === 'reports' ? 'file-text' : t.key === 'reviews' ? 'star' : t.key === 'overview' ? 'bar-chart-2' : 'file-text'} size={21} color={current === t.key ? colors.green : colors.muted} /><Text style={{ color: current === t.key ? colors.green : colors.muted, fontWeight: current === t.key ? '800' : '500', fontSize: 12 }}>{t.label}</Text></Pressable>)}</View> : null}
+    {!create ? <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderTopWidth: 1, borderColor: colors.border }}>{tabs.filter(t => t.key !== 'reviews').map(t => <Pressable key={t.key} accessibilityRole="tab" accessibilityState={{ selected: current === t.key }} onPress={() => setTab(t.key)} style={{ flex: 1, minHeight: 60, justifyContent: 'center', alignItems: 'center', padding: 4, gap: 4 }}><Feather name={t.key === 'account' ? 'user' : t.key === 'home' ? 'home' : t.key === 'orders' ? 'map-pin' : t.key === 'requests' ? 'inbox' : t.key === 'reports' ? 'file-text' : t.key === 'overview' ? 'bar-chart-2' : 'file-text'} size={21} color={current === t.key ? colors.green : colors.muted} /><Text style={{ color: current === t.key ? colors.green : colors.muted, fontWeight: current === t.key ? '800' : '500', fontSize: 12 }}>{t.label}</Text></Pressable>)}</View> : null}
   </>
 }
 function BadgeRole({ role }: { role: string }) { return <Text style={[s.text, { color: colors.green }]}>{readable(role)}</Text> }
 
-function RetainedWorkspace({ tabs, current, create, focusToday, onCreate, onDone, onPassword, onTab, onOpenToday, assignmentTarget, onAssignmentOpened, reviewTarget }: { tabs: { key: string; label: string }[]; current: string; create: boolean; focusToday: boolean; onCreate: () => void; onDone: () => void; onPassword: () => void; onTab: (tab: string) => void; onOpenToday: () => void; assignmentTarget: AssignmentTarget | null; onAssignmentOpened: () => void; reviewTarget: ReviewTarget | null }) {
+function RetainedWorkspace({ tabs, current, create, focusToday, onCreate, onDone, onPassword, onReviews, onTab, onOpenToday, assignmentTarget, onAssignmentOpened, reviewTarget }: { tabs: { key: string; label: string }[]; current: string; create: boolean; focusToday: boolean; onCreate: () => void; onDone: () => void; onPassword: () => void; onReviews: () => void; onTab: (tab: string) => void; onOpenToday: () => void; assignmentTarget: AssignmentTarget | null; onAssignmentOpened: () => void; reviewTarget: ReviewTarget | null }) {
   const [visited, setVisited] = useState([current])
   useEffect(() => { setVisited(previous => previous.includes(current) ? previous : [...previous, current]) }, [current])
   return <View style={s.flex}>
     {tabs.filter(t => visited.includes(t.key) || current === t.key).map(t => {
       const active = !create && current === t.key
       return <View key={t.key} style={active ? s.flex : { display: 'none' }} accessibilityElementsHidden={!active} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}>
-        {t.key === 'patients' ? <DoctorReferrals active={active} onCreate={onCreate} /> : t.key === 'home' ? <CollectionAgentHome active={active} onOpenCollections={onOpenToday} onOpenAllCollections={() => onTab('orders')} onOpenRequests={() => onTab('requests')} /> : t.key === 'orders' ? <Collections active={active} focusToday={focusToday} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'requests' ? <AssignmentRequests active={active} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'reports' ? <CollectionReports active={active} /> : t.key === 'reviews' ? <CollectionAgentReviews active={active} reviewTarget={reviewTarget} /> : t.key === 'overview' ? <Collections active={active} overview /> : t.key === 'referrals' ? <AgentReferrals active={active} /> : <Account onPassword={onPassword} noAccess={tabs.length === 1} />}
+        {t.key === 'patients' ? <DoctorReferrals active={active} onCreate={onCreate} /> : t.key === 'home' ? <CollectionAgentHome active={active} onOpenCollections={onOpenToday} onOpenAllCollections={() => onTab('orders')} onOpenRequests={() => onTab('requests')} /> : t.key === 'orders' ? <Collections active={active} focusToday={focusToday} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'requests' ? <AssignmentRequests active={active} assignmentTarget={assignmentTarget} onAssignmentOpened={onAssignmentOpened} /> : t.key === 'reports' ? <CollectionReports active={active} /> : t.key === 'reviews' ? <CollectionAgentReviews active={active} reviewTarget={reviewTarget} /> : t.key === 'overview' ? <Collections active={active} overview /> : t.key === 'referrals' ? <AgentReferrals active={active} /> : <Account onPassword={onPassword} onReviews={onReviews} noAccess={tabs.length === 1} />}
       </View>
     })}
     {create ? <NewReferral onDone={onDone} /> : null}
   </View>
 }
-function Account({ onPassword, noAccess }: { onPassword: () => void; noAccess: boolean }) {
+function Account({ onPassword, onReviews, noAccess }: { onPassword: () => void; onReviews: () => void; noAccess: boolean }) {
   const auth = useAuth(), user = auth.user!
+  const reviews = useResource(() => user.role === 'collection_agent' ? api.collectionAgentReviews(auth.token!) : Promise.resolve([]), 'account-review-summary', true)
+  const ratings = reviews.data || [], average = ratings.length ? (ratings.reduce((sum, review) => sum + review.rating, 0) / ratings.length).toFixed(1) : null
   return <Page>
     <View style={s.card}><Text style={s.title}>{user.full_name}</Text><BadgeRole role={user.role} /><Text style={s.text}>{user.email}</Text><Text style={s.muted}>{user.hospital_clinic_name || user.phone_number || ''}</Text></View>
     {user.role !== 'doctor' ? <View style={s.card}><Text style={s.title}>Workspace access</Text>{auth.permissions.filter(p => ['overview', 'orders', 'referrals'].includes(p.screen)).map(p => <Text key={p.screen} style={s.text}>{readable(p.screen)}: {readable(p.access_level)}</Text>)}{noAccess ? <Text style={s.text}>No operational access assigned. Ask a super admin to grant screen access.</Text> : null}<Button label="Refresh access" secondary onPress={() => void auth.refresh()} /></View> : null}
+    {user.role === 'collection_agent' ? <Pressable onPress={onReviews} accessibilityRole="button" style={s.card}><View style={s.between}><View><Text style={s.title}>Customer reviews</Text><Text style={s.muted}>Anonymous feedback from completed collections</Text></View><Feather name="chevron-right" size={22} color={colors.muted} /></View><Text style={{ color: '#E09A16', fontSize: 22, letterSpacing: 2 }}>{average ? `${average} / 5  ★★★★★` : 'No ratings yet'}</Text></Pressable> : null}
     <Button label="Change password" icon="lock" secondary onPress={onPassword} />
     <Text style={s.muted}>Patient details are not stored for offline use. Use Forgot password on the sign-in screen if you cannot access your account.</Text>
     <Button label="Sign out" secondary onPress={() => Alert.alert('Sign out?', 'Your session and displayed patient information will be cleared.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign out', onPress: () => void auth.logout() }])} />
