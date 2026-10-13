@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { resourceCache } from '../cache/resources'
-import { Alert, AppState, Linking, Pressable, Text, View } from 'react-native'
+import { Alert, AppState, BackHandler, Linking, Pressable, Text, View } from 'react-native'
 import { api } from '../api/client'
 import type { Assignment, AssignmentRequest, CollectionAgentReview } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
@@ -217,6 +217,7 @@ function CollectionDetail({ assignment, writable, onClose, onUpdated }: { assign
   const updating = useRef(false)
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  useEffect(() => { const listener = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true }); return () => listener.remove() }, [onClose])
   const [blocked, setBlocked] = useState(false), [success, setSuccess] = useState(''), [rejecting, setRejecting] = useState(false), [reason, setReason] = useState('')
   const [confirmedStatus, setConfirmedStatus] = useState<'accepted' | 'rejected' | null>(null)
   const [otp, setOtp] = useState(''), [otpBusy, setOtpBusy] = useState(false), [otpError, setOtpError] = useState('')
